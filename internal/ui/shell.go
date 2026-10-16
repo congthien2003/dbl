@@ -29,6 +29,10 @@ type Shell struct {
 	// tabGap is where the line under the tab strip is cut, under the tab
 	// chosen, as laid out in the last frame.
 	tabGap tabSpan
+	// tabShown is the tab the strip last scrolled to show.
+	tabShown app.TabID
+	// tabScroll is how far the tab strip is scrolled; the wheel moves it.
+	tabScroll mygoui.ScrollState
 
 	// The connection dialogs: at most one of form and nameDlg is open; pw
 	// is the password being typed in the prompt.
@@ -105,11 +109,26 @@ func (sh *Shell) topBar(c *mygoui.Context, t *mygoui.Theme) {
 			idx = i
 		}
 	}
-	mygoui.Row(c).Padding(8, 12).Gap(12).AlignItems(mygoui.Center).Children(func() {
+	mygoui.Row(c).Padding(6, 12).Gap(8).AlignItems(mygoui.Center).Children(func() {
 		mygoui.Text(c, "SBDb").Bold()
 		mygoui.Box(c).Grow(1)
-		mygoui.Text(c, "Theme").TextColor(t.TextMuted)
-		if mygoui.Segmented(c, &idx, "System", "Light", "Dark").Label("Theme").Changed() {
+		mygoui.Text(c, "Theme").FontSize(11).TextColor(t.TextMuted)
+		// Three icons: the system's theme, Light and Dark.
+		shown := idx
+		seg := mygoui.SegmentedBase(c.Key("theme"), &idx, len(themeChoices))
+		seg.Track.Padding(2).Radius(6).Background(t.Surface).Gap(2).Label("Theme").Children(func() {
+			for i, s := range []struct {
+				name string
+				svg  *mygoui.SVG
+			}{{"System", icons.ThemeSystem}, {"Light", icons.ThemeLight}, {"Dark", icons.ThemeDark}} {
+				item := seg.Segment(i).Padding(3, 6).Radius(4).AlignItems(mygoui.Center).Label(s.name).Tooltip(s.name)
+				if i == idx {
+					item.Background(t.Background)
+				}
+				item.Children(func() { mygoui.Icon(c, s.svg).FontSize(12) })
+			}
+		})
+		if idx != shown {
 			sh.st.SetTheme(themeChoices[idx])
 			c.Invalidate()
 		}

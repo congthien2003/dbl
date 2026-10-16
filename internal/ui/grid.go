@@ -14,6 +14,12 @@ import (
 // never cut.
 const maxCellRunes = 120
 
+// barRoom is the room the last row has under its cells, where the
+// horizontal scroll bar (6 DIPs, 3 above the edge) shows without covering
+// the values. The rows are a scroll container inside the table, out of reach
+// of Padding and ScrollbarInsets, so the cells of the last row are taller.
+const barRoom = 12
+
 // cellPos is a cell by the index of its visible row and its column.
 type cellPos struct{ Row, Col int }
 
@@ -230,6 +236,9 @@ func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, co
 	// less the padding MyGo's table gives a cell (Space(1.5) above and
 	// below, Space(2.5) at the sides).
 	box := mygoui.Row(c).Grow(1).AlignSelf(mygoui.Stretch).AlignItems(mygoui.Center)
+	if row == tab.Source.Len()-1 {
+		box.Padding(0, 0, barRoom, 0)
+	}
 	padX, padY := t.Space(2.5), t.Space(1.5)
 	if r := box.LayoutBounds(); r.W > 0 {
 		g.next[col] = r.X + r.W + padX

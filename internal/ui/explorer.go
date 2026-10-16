@@ -463,7 +463,7 @@ func (sh *Shell) explorerRow(c *mygoui.Context, t *mygoui.Theme, id string) {
 		glyph, color := statusGlyph(status, t)
 		row.ContextMenu(func(m *mygoui.Menu) { sh.connectionMenu(m, n) }).Children(func() {
 			mygoui.Text(c, glyph).TextColor(color).Label(status.String())
-			mygoui.Icon(c, icons.Connection).TextColor(color)
+			mygoui.Icon(c, icons.Connection)
 			text := mygoui.Text(c, n.label).SingleLine()
 			if status == connection.Failed {
 				if err := sh.st.Conns.Err(id); err != nil {

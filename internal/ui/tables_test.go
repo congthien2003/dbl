@@ -383,3 +383,102 @@ func TestTabStripLineIsCutUnderTheChosenTab(t *testing.T) {
 		t.Errorf("the gap did not come back: %+v, want %+v", sh.tabGap, gapOrders)
 	}
 }
+
+func TestTabStripScrollsWhenTabsOverflow(t *testing.T) {
+	sh, tt := newTestShell(t)
+	ws := &sh.st.Workspace
+	var first, last *app.Tab
+	for i := range 30 {
+		tab := ws.NewSQL("local-pg")
+		if i == 0 {
+			first = tab
+		}
+		last = tab
+	}
+	frames := func() {
+		for range 4 {
+			tt.Frame()
+		}
+	}
+	frames()
+	// A tab scrolled out of the strip is laid out with no size.
+	const stripLeft, width = 260, 1280 // the strip lies right of the sidebar
+	inView := func(title string) bool {
+		r, ok := tt.Find(title)
+		return ok && r.W > 0 && r.X >= stripLeft && r.X+r.W <= width
+	}
+	if !inView(last.Title) {
+		r, _ := tt.Find(last.Title)
+		t.Errorf("the new tab %q is not scrolled into view: %+v", last.Title, r)
+	}
+	if inView(first.Title) {
+		t.Errorf("the first of 30 tabs is still in view with the last: the strip does not overflow")
+	}
+	ws.Select(first.ID)
+	frames()
+	if !inView(first.Title) {
+		r, _ := tt.Find(first.Title)
+		t.Errorf("the tab chosen %q is not scrolled into view: %+v", first.Title, r)
+	}
+}
+
+func TestWheelScrollsTheTabStripSideways(t *testing.T) {
+	sh, tt := newTestShell(t)
+	ws := &sh.st.Workspace
+	for range 30 {
+		ws.NewSQL("local-pg")
+	}
+	for range 4 {
+		tt.Frame()
+	}
+	at := func() float32 { r, _ := tt.Find("Query 29"); return r.X }
+	r, _ := tt.Find("Query 29") // over the strip
+	x0 := at()
+	// Up the wheel: toward the first tab, the tabs move right.
+	tt.Scroll(r.X+10, r.Y+5, 0, -200)
+	tt.Frame()
+	tt.Frame()
+	x1 := at()
+	if x1 <= x0 {
+		t.Fatalf("the wheel up moved the tabs from x=%v to x=%v, want to the right", x0, x1)
+	}
+	// Down the wheel: back toward the last.
+	tt.Scroll(r.X+10, r.Y+5, 0, 200)
+	tt.Frame()
+	tt.Frame()
+	if x2 := at(); x2 >= x1 {
+		t.Errorf("the wheel down moved the tabs from x=%v to x=%v, want to the left", x1, x2)
+	}
+	if sh.tabScroll.X <= 0 {
+		t.Errorf("scrolled %v after going down, want a positive offset", sh.tabScroll.X)
+	}
+}
+
+func TestLastRowKeepsRoomForTheHorizontalScrollBar(t *testing.T) {
+	e, _ := newTablesEnv(t)
+	doubleClickText(t, e.tt, "public")
+	e.runPost()
+	doubleClickText(t, e.tt, "users")
+	e.runPost()
+	e.runPost()
+	e.tt.SetSize(700, 500) // narrower than the columns: the grid has a horizontal bar
+	for range 3 {
+		e.tt.Frame()
+	}
+	e.tt.Scroll(500, 300, 0, 100000) // to the last row of the page
+	e.tt.Frame()
+	e.tt.Frame()
+	last, ok := e.tt.Find("user 100")
+	if !ok {
+		t.Fatalf("the last row of the page is not shown: %q", e.tt.Texts()[:20])
+	}
+	pager, ok := e.tt.Find("First")
+	if !ok {
+		t.Fatal("no pager")
+	}
+	// The pager starts below the grid; the bar (6 DIPs, 3 above the edge)
+	// must lie under the text of the last row.
+	if room := pager.Y - (last.Y + last.H); room < 9+4 {
+		t.Errorf("%.1f DIPs between the text of the last row and the bottom of the grid, want room for the scroll bar", room)
+	}
+}
