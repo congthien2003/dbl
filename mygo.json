@@ -1,0 +1,6 @@
+{
+  "name": "SBDb",
+  "identifier": "com.example.sbdb",
+  "version": "0.1.0",
+  "out": "build"
+}
