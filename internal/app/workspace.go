@@ -5,7 +5,6 @@ import (
 
 	"dbl/internal/database"
 	"dbl/internal/grid"
-	"dbl/internal/mock"
 )
 
 // TabID identifies a tab for its whole life. IDs start at 1 and are never
@@ -36,8 +35,12 @@ type Tab struct {
 	Title string
 	Table TableKey // for TabSQL only ConnectionID is meaningful
 
-	Dataset *mock.Dataset
-	Drafts  grid.Drafts
+	// Source is what the grid of a table tab shows. For a PostgreSQL table
+	// it is Data; tests may give any source.
+	Source grid.Source
+	// Data is the state of a table read from a database, nil otherwise.
+	Data   *TableData
+	Drafts grid.Drafts
 }
 
 // Dirty reports whether the tab holds unsaved data. SQL tabs are never
@@ -60,14 +63,14 @@ func (w *Workspace) newID() TabID {
 
 // OpenTable opens a tab for key, or focuses the existing tab for the same
 // connection and table. created reports whether a tab was added.
-func (w *Workspace) OpenTable(key TableKey, title string, ds *mock.Dataset) (tab *Tab, created bool) {
+func (w *Workspace) OpenTable(key TableKey, title string, src grid.Source) (tab *Tab, created bool) {
 	for _, t := range w.Tabs {
 		if t.Kind == TabTable && t.Table == key {
 			w.ActiveID = t.ID
 			return t, false
 		}
 	}
-	tab = &Tab{ID: w.newID(), Kind: TabTable, Title: title, Table: key, Dataset: ds}
+	tab = &Tab{ID: w.newID(), Kind: TabTable, Title: title, Table: key, Source: src}
 	w.Tabs = append(w.Tabs, tab)
 	w.ActiveID = tab.ID
 	return tab, true
@@ -111,6 +114,7 @@ func (w *Workspace) Close(id TabID) {
 	if i < 0 {
 		return
 	}
+	w.Tabs[i].Data.release()
 	w.Tabs = append(w.Tabs[:i:i], w.Tabs[i+1:]...)
 	if w.ActiveID != id {
 		return

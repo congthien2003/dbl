@@ -14,9 +14,10 @@ import (
 // Adapter is an open PostgreSQL session: a small pool of connections.
 type Adapter struct {
 	db *sql.DB
+	// catalog is the database the pool is bound to, the Catalog of every
+	// table reference this adapter returns.
+	catalog string
 }
-
-var _ database.Adapter = (*Adapter)(nil)
 
 // Ping checks that the server answers.
 func (a *Adapter) Ping(ctx context.Context) error {
@@ -47,5 +48,5 @@ func Connect(ctx context.Context, p connection.Profile, password string) (databa
 		_ = db.Close()
 		return nil, classify(err, p, password)
 	}
-	return &Adapter{db: db}, nil
+	return &Adapter{db: db, catalog: p.Database}, nil
 }

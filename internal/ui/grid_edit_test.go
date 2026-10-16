@@ -18,8 +18,8 @@ func selectNameCell(t *testing.T) (*Shell, *mygoui.Tester, *app.Tab, *gridView, 
 	sh, tt := newTestShell(t)
 	tab := openTable(t, sh, tt, "users")
 	g := gridOf(t, sh)
-	row := plainNameRow(t, tab.Dataset)
-	clickCell(t, tt, tab.Dataset, row, 1)
+	row := plainNameRow(t, tab.Source)
+	clickCell(t, tt, tab.Source, row, 1)
 	return sh, tt, tab, g, row
 }
 
@@ -47,8 +47,8 @@ func TestDoubleClickOpensEditor(t *testing.T) {
 	sh, tt := newTestShell(t)
 	tab := openTable(t, sh, tt, "users")
 	g := gridOf(t, sh)
-	row := plainNameRow(t, tab.Dataset)
-	cell := clickCell(t, tt, tab.Dataset, row, 1)
+	row := plainNameRow(t, tab.Source)
+	cell := clickCell(t, tt, tab.Source, row, 1)
 	x, y := center(cell)
 	tt.ClickAt(x, y)
 	if g.edit == nil {
@@ -80,7 +80,7 @@ func TestEnterWithoutChangingTextCreatesNoDraft(t *testing.T) {
 
 func TestEditBackToOriginalClearsDirty(t *testing.T) {
 	_, tt, tab, g, row := selectNameCell(t)
-	original := tab.Dataset.Value(row, 1).Text
+	original := tab.Source.Value(row, 1).Text
 	tt.Key(0, mygoui.KeyF2)
 	tt.Type("x")
 	tt.Key(0, mygoui.KeyEnter)
@@ -106,13 +106,13 @@ func TestClickingAnotherCellCommitsEdit(t *testing.T) {
 	_, tt, tab, g, row := selectNameCell(t)
 	other := row + 1
 	for ; other < 40; other++ {
-		if v := tab.Dataset.Value(other, 1); v.Kind == grid.KindText && strings.HasPrefix(v.Text, "Name ") {
+		if v := tab.Source.Value(other, 1); v.Kind == grid.KindText && strings.HasPrefix(v.Text, "Name ") {
 			break
 		}
 	}
 	tt.Key(0, mygoui.KeyF2)
 	tt.Type("kept")
-	clickCell(t, tt, tab.Dataset, other, 1)
+	clickCell(t, tt, tab.Source, other, 1)
 	if g.edit != nil {
 		t.Error("clicking another cell left the editor open")
 	}
@@ -129,15 +129,15 @@ func TestNonEditableCellsIgnoreF2(t *testing.T) {
 	tab := openTable(t, sh, tt, "users")
 	g := gridOf(t, sh)
 	// The primary key column.
-	clickCell(t, tt, tab.Dataset, 0, 0)
+	clickCell(t, tt, tab.Source, 0, 0)
 	tt.Key(0, mygoui.KeyF2)
 	if g.edit != nil {
 		t.Error("the id column opened an editor")
 	}
 	// The binary column.
 	for r := 0; r < 25; r++ {
-		if tab.Dataset.Value(r, 6).Kind == grid.KindBinary {
-			clickCell(t, tt, tab.Dataset, r, 6)
+		if tab.Source.Value(r, 6).Kind == grid.KindBinary {
+			clickCell(t, tt, tab.Source, r, 6)
 			break
 		}
 	}
@@ -148,8 +148,8 @@ func TestNonEditableCellsIgnoreF2(t *testing.T) {
 	// A view is read-only everywhere.
 	view := openTable(t, sh, tt, "active_users")
 	vg := gridOf(t, sh)
-	r := plainNameRow(t, view.Dataset)
-	clickCell(t, tt, view.Dataset, r, 1)
+	r := plainNameRow(t, view.Source)
+	clickCell(t, tt, view.Source, r, 1)
 	tt.Key(0, mygoui.KeyF2)
 	if vg.edit != nil || view.Drafts.Len() != 0 {
 		t.Error("a view cell opened an editor")
@@ -159,7 +159,7 @@ func TestNonEditableCellsIgnoreF2(t *testing.T) {
 func TestRevertButtonClearsAllDrafts(t *testing.T) {
 	sh, tt := newTestShell(t)
 	tab := openTable(t, sh, tt, "users")
-	ds := tab.Dataset
+	ds := tab.Source
 	for r := 0; r < 2; r++ {
 		ref := grid.CellRef{RowID: ds.RowID(r), Col: 1}
 		tab.Drafts.Set(ref, ds.Value(r, 1), grid.Value{Kind: grid.KindText, Text: "edited"})
@@ -208,7 +208,7 @@ func TestDraftsDoNotLeakAcrossTabs(t *testing.T) {
 	sh, tt := newTestShell(t)
 	users := openTable(t, sh, tt, "users")
 	ref := grid.CellRef{RowID: 1, Col: 1}
-	users.Drafts.Set(ref, users.Dataset.Value(0, 1), grid.Value{Kind: grid.KindText, Text: "edited"})
+	users.Drafts.Set(ref, users.Source.Value(0, 1), grid.Value{Kind: grid.KindText, Text: "edited"})
 	orders := openTable(t, sh, tt, "orders")
 	if orders.Dirty() || !users.Dirty() {
 		t.Errorf("orders dirty=%v users dirty=%v", orders.Dirty(), users.Dirty())

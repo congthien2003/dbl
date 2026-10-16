@@ -11,6 +11,8 @@ import (
 type State struct {
 	Settings  storage.Settings
 	Workspace Workspace
+	// Explorer holds what the explorer read below the connections.
+	Explorer ExplorerData
 
 	// Catalog is the saved folders and connections; Conns opens and tracks
 	// their sessions (nil in tests that do not connect).

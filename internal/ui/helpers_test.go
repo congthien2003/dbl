@@ -209,7 +209,7 @@ func openTable(t *testing.T, sh *Shell, tt *mygoui.Tester, name string) *app.Tab
 	if !ok {
 		t.Fatalf("no mock table %q", name)
 	}
-	tab, _ := sh.st.Workspace.OpenTable(key, name, ds)
+	tab, _ := sh.st.Workspace.OpenTable(key, name, ds.Source())
 	tt.Frame()
 	return tab
 }
@@ -232,7 +232,7 @@ func center(r mygoui.Rect) (x, y float32) { return r.X + r.W/2, r.Y + r.H/2 }
 
 // plainNameRow returns the first row whose name column (1) shows an
 // ordinary "Name N" text, so the cell can be found by its text alone.
-func plainNameRow(t *testing.T, ds *mock.Dataset) int {
+func plainNameRow(t *testing.T, ds grid.Source) int {
 	t.Helper()
 	for r := 0; r < 40; r++ {
 		if v := ds.Value(r, 1); v.Kind == grid.KindText && strings.HasPrefix(v.Text, "Name ") {
@@ -245,7 +245,7 @@ func plainNameRow(t *testing.T, ds *mock.Dataset) int {
 
 // clickCell clicks the cell showing the display text of ds.Value(row, col)
 // and returns its box.
-func clickCell(t *testing.T, tt *mygoui.Tester, ds *mock.Dataset, row, col int) mygoui.Rect {
+func clickCell(t *testing.T, tt *mygoui.Tester, ds grid.Source, row, col int) mygoui.Rect {
 	t.Helper()
 	text := ds.Value(row, col).Display(maxCellRunes)
 	r, ok := tt.Find(text)
@@ -269,5 +269,5 @@ func doubleClickText(t *testing.T, tt *mygoui.Tester, text string) {
 }
 
 func draftAt(tab *app.Tab, row, col int) (grid.Value, bool) {
-	return tab.Drafts.Get(grid.CellRef{RowID: tab.Dataset.RowID(row), Col: col})
+	return tab.Drafts.Get(grid.CellRef{RowID: tab.Source.RowID(row), Col: col})
 }

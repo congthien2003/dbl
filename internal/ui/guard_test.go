@@ -10,7 +10,7 @@ import (
 )
 
 func makeTabDirty(tab *app.Tab) {
-	ds := tab.Dataset
+	ds := tab.Source
 	ref := grid.CellRef{RowID: ds.RowID(0), Col: 1}
 	tab.Drafts.Set(ref, ds.Value(0, 1), grid.Value{Kind: grid.KindText, Text: "edited"})
 }

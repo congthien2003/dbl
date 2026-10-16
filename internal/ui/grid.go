@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"slices"
+
 	mygoui "github.com/egoist/mygo/ui"
 
 	"dbl/internal/app"
+	"dbl/internal/database"
 	"dbl/internal/grid"
-	"dbl/internal/mock"
 )
 
 // maxCellRunes is how much of a value a cell shows; the value itself is
@@ -33,16 +35,37 @@ type gridView struct {
 	cell    cellPos // the cell chosen, noCell for none
 	edit    *cellEdit
 	cols    []mygoui.TableColumn
-	refocus bool // give the keyboard back to the table after an edit
+	colSig  string // the columns cols was made for
+	refocus bool   // give the keyboard back to the table after an edit
+	sort    mygoui.SortOrder
+	seq     int // the PageSeq of the rows the selection belongs to
+
+	// edges are the x positions of the right edges of the columns, taken
+	// from the cells of the last frame; the lines between columns are drawn
+	// at them over the whole table, header and empty room included.
+	edges []float32
+	next  map[int]float32
+	// lastBottom is the bottom of the lowest cell painted in the last frame,
+	// where the lines between columns carry on below the rows.
+	lastBottom, paintBottom float32
 }
 
 func newGridView() *gridView { return &gridView{row: -1, cell: noCell} }
 
-func (g *gridView) columns(ds *mock.Dataset) []mygoui.TableColumn {
-	if g.cols == nil {
-		g.cols = make([]mygoui.TableColumn, len(ds.Columns))
-		for i, col := range ds.Columns {
-			g.cols[i] = mygoui.TableColumn{Title: col.Name, ID: col.Name, Width: col.Width, MinWidth: 60}
+// columns returns the table columns of the source, made again only when the
+// source's columns change; the widths the user gave are kept by the list
+// state, by column ID.
+func (g *gridView) columns(src grid.Source) []mygoui.TableColumn {
+	cols := src.Columns()
+	sig := ""
+	for _, col := range cols {
+		sig += col.Name + ""
+	}
+	if g.cols == nil || g.colSig != sig {
+		g.colSig = sig
+		g.cols = make([]mygoui.TableColumn, len(cols))
+		for i, col := range cols {
+			g.cols[i] = mygoui.TableColumn{Title: col.Name, ID: col.Name, Width: col.Width, MinWidth: 60, Sortable: col.Sortable}
 		}
 	}
 	return g.cols
@@ -50,22 +73,99 @@ func (g *gridView) columns(ds *mock.Dataset) []mygoui.TableColumn {
 
 // value returns what a cell shows and whether it holds an unsaved edit.
 func (g *gridView) value(tab *app.Tab, row, col int) (v grid.Value, dirty bool) {
-	ds := tab.Dataset
-	ref := grid.CellRef{RowID: ds.RowID(row), Col: col}
+	src := tab.Source
+	ref := grid.CellRef{RowID: src.RowID(row), Col: col}
 	if d, ok := tab.Drafts.Get(ref); ok {
 		return d, true
 	}
-	return ds.Value(row, col), false
+	return src.Value(row, col), false
+}
+
+// updateEdges keeps the column edges seen in this frame for the next one,
+// and asks for a frame when they moved (a column resized or scrolled).
+func (g *gridView) updateEdges(c *mygoui.Context) {
+	edges := make([]float32, 0, len(g.next))
+	for _, x := range g.next {
+		edges = append(edges, x)
+	}
+	slices.Sort(edges)
+	if !slices.Equal(edges, g.edges) {
+		g.edges = edges
+		c.Invalidate()
+	}
+}
+
+// newPage drops what belonged to the rows that were replaced: the
+// selection, the editor and the scroll position. The widths the user gave
+// the columns stay.
+func (g *gridView) newPage() {
+	layout := g.list.Columns
+	g.list = mygoui.ListState{}
+	g.list.Columns = layout
+	g.row, g.cell, g.edit = -1, noCell, nil
 }
 
 // build draws the grid and handles its keys.
-func (g *gridView) build(c *mygoui.Context, tab *app.Tab, p Palette) {
-	ds := tab.Dataset
+func (g *gridView) build(c *mygoui.Context, st *app.State, tab *app.Tab, p Palette) {
+	src := tab.Source
+	var d *app.TableData
+	if tab.Data != nil {
+		d = tab.Data
+		if g.seq != d.PageSeq {
+			g.seq = d.PageSeq
+			g.newPage()
+		}
+	}
 	g.list.Selected = &g.row
-	g.list.Key = func(row int) any { return ds.RowID(row) }
-	mygoui.Table(c, &g.list, g.columns(ds), ds.Rows, func(row, col int) {
+	g.list.Key = src.RowKey
+	// The sort the table shows is the one the server applies; a click on a
+	// header changes g.sort, which is then sent as the new sort.
+	var applied mygoui.SortOrder
+	if d != nil && d.Sort != nil {
+		applied = mygoui.SortOrder{Column: d.Sort.Column, Descending: d.Sort.Desc}
+	}
+	g.sort = applied
+	g.list.Sort = &g.sort
+	g.next = map[int]float32{}
+	tbl := mygoui.Table(c, &g.list, g.columns(src), src.Len(), func(row, col int) {
 		g.buildCell(c, tab, p, row, col)
 	}).Grow(1).Label("Grid")
+	// The lines of the rows are drawn by the cells themselves, so they move
+	// with the rows. The lines between columns continue where there are no
+	// cells: under the last row, drawn below the table's children so the
+	// scroll bars stay on top, and in the header, drawn last so they also
+	// replace the short resize mark MyGo draws at the end of each header.
+	// DrawOver replaces the table's own, so the focus ring is drawn here.
+	th := c.Theme()
+	headH := th.Space(8) // the height of a table header (MyGo's table.go)
+	tbl.Draw(func(pt *mygoui.Painter, r mygoui.Rect) {
+		// The cells paint after this, so what they report is for the next paint.
+		g.lastBottom, g.paintBottom = g.paintBottom, 0
+		top := max(g.lastBottom, r.Y+headH)
+		if g.lastBottom == 0 || top >= r.Y+r.H {
+			return
+		}
+		for _, x := range g.edges {
+			pt.Fill(mygoui.Rect{X: x - 1, Y: top, W: 1, H: r.Y + r.H - top}, p.GridLine, 0)
+		}
+	})
+	tbl.DrawOver(func(pt *mygoui.Painter, r mygoui.Rect) {
+		if tbl.FocusVisible() {
+			pt.FocusRing(r, [4]float32{})
+		}
+		for _, x := range g.edges {
+			pt.Fill(mygoui.Rect{X: x - 1, Y: r.Y, W: 1, H: headH}, p.GridLine, 0)
+		}
+	})
+	g.updateEdges(c)
+	if d != nil && g.sort != applied {
+		var s *database.Sort
+		if g.sort.Column != "" {
+			s = &database.Sort{Column: g.sort.Column, Desc: g.sort.Descending}
+		}
+		_ = st.SetSort(tab, s)
+		c.Invalidate()
+	}
 	if g.refocus {
 		g.refocus = false
 		g.list.Focus(c)
@@ -92,7 +192,23 @@ func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, co
 		return
 	}
 	v, dirty := g.value(tab, row, col)
-	box := mygoui.Row(c).Grow(1).AlignItems(mygoui.Center)
+	// The box fills the content of its cell, so it is as high as the row
+	// less the padding MyGo's table gives a cell (Space(1.5) above and
+	// below, Space(2.5) at the sides).
+	box := mygoui.Row(c).Grow(1).AlignSelf(mygoui.Stretch).AlignItems(mygoui.Center)
+	padX, padY := t.Space(2.5), t.Space(1.5)
+	if r := box.LayoutBounds(); r.W > 0 {
+		g.next[col] = r.X + r.W + padX
+	}
+	// A faint line below and to the right of the cell, over its whole
+	// padded area so neighbours join into rules.
+	box.Draw(func(pt *mygoui.Painter, r mygoui.Rect) {
+		x0, y0 := r.X-padX, r.Y-padY
+		w, h := r.W+2*padX, r.H+2*padY
+		pt.Fill(mygoui.Rect{X: x0, Y: y0 + h - 1, W: w, H: 1}, p.GridLine, 0)
+		pt.Fill(mygoui.Rect{X: x0 + w - 1, Y: y0, W: 1, H: h}, p.GridLine, 0)
+		g.paintBottom = max(g.paintBottom, y0+h)
+	})
 	switch {
 	case dirty:
 		box.Background(p.Dirty)
@@ -123,10 +239,11 @@ func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, co
 
 // startEdit opens the editor on pos unless the cell cannot be edited.
 func (g *gridView) startEdit(c *mygoui.Context, tab *app.Tab, pos cellPos) {
-	if pos.Row < 0 || pos.Col < 0 || pos.Col >= len(tab.Dataset.Columns) {
+	cols := tab.Source.Columns()
+	if pos.Row < 0 || pos.Col < 0 || pos.Col >= len(cols) || pos.Row >= tab.Source.Len() {
 		return
 	}
-	if !tab.Dataset.Columns[pos.Col].Editable {
+	if !cols[pos.Col].Editable {
 		return
 	}
 	v, _ := g.value(tab, pos.Row, pos.Col)
@@ -162,13 +279,13 @@ func (g *gridView) commit(c *mygoui.Context, tab *app.Tab) {
 	if e == nil || e.text == e.initial {
 		return
 	}
-	ds := tab.Dataset
-	original := ds.Value(e.pos.Row, e.pos.Col)
+	src := tab.Source
+	original := src.Value(e.pos.Row, e.pos.Col)
 	kind := original.Kind
 	if kind == grid.KindNull {
 		kind = grid.KindText
 	}
-	ref := grid.CellRef{RowID: ds.RowID(e.pos.Row), Col: e.pos.Col}
+	ref := grid.CellRef{RowID: src.RowID(e.pos.Row), Col: e.pos.Col}
 	tab.Drafts.Set(ref, original, grid.Value{Kind: kind, Text: e.text})
 }
 

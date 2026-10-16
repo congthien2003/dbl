@@ -39,6 +39,7 @@ type tabView struct {
 	section int // 0 = Data, 1 = Properties
 	grid    *gridView
 	sql     *sqlView
+	filter  *filterBar
 }
 
 // NewShell returns the shell for st.
@@ -176,7 +177,7 @@ func (sh *Shell) statusBar(c *mygoui.Context, t *mygoui.Theme) {
 		}
 		mygoui.Box(c).Grow(1)
 		if tab := sh.st.Workspace.Active(); tab != nil && tab.Kind == app.TabTable {
-			mygoui.Text(c, formatCount(tab.Dataset.Rows)+" rows").FontSize(12).TextColor(t.TextMuted)
+			mygoui.Text(c, rowsSummary(tab)).FontSize(12).TextColor(t.TextMuted)
 		}
 	})
 }
@@ -214,6 +215,20 @@ func (sh *Shell) dialogs(c *mygoui.Context, t *mygoui.Theme) {
 			c.Invalidate()
 		}
 	}
+}
+
+// rowsSummary describes the rows of a table tab for the status bar: the
+// rows in view, and the server's estimate of the table when it has one.
+func rowsSummary(tab *app.Tab) string {
+	if tab.Data == nil {
+		return formatCount(tab.Source.Len()) + " rows"
+	}
+	d := tab.Data
+	s := formatCount(d.Len()) + " rows in view"
+	if d.Meta != nil && d.Filter == nil && d.Meta.EstimatedRows >= 0 {
+		s += " · about " + formatCount(int(d.Meta.EstimatedRows)) + " in the table"
+	}
+	return s
 }
 
 // formatCount writes n with thousands separators.

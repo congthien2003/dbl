@@ -18,6 +18,7 @@ type Palette struct {
 	Disabled   mygoui.Color // fill of a disabled surface
 	ActiveCell mygoui.Color // fill of the selected cell
 	Null       mygoui.Color // text color of NULL and empty values
+	GridLine   mygoui.Color // faint line between cells
 }
 
 // NewPalette derives the palette from t.
@@ -28,6 +29,7 @@ func NewPalette(t *mygoui.Theme) Palette {
 		Disabled:   t.TextMuted.Alpha(0.20).Over(t.Background),
 		ActiveCell: t.Accent.Alpha(0.30).Over(t.Background),
 		Null:       t.TextMuted,
+		GridLine:   t.Border.Alpha(0.45).Over(t.Background),
 	}
 }
 

@@ -67,6 +67,13 @@ type entry struct {
 	adapter database.Adapter
 	running *attempt // the attempt allowed to report, nil when none
 
+	// epoch numbers the session: it changes with every new session, so work
+	// started on an older one can tell that it is stale. sessionCtx ends
+	// when the session does, which stops the queries running on it.
+	epoch      uint64
+	sessionCtx context.Context
+	endSession context.CancelFunc
+
 	// session is a password held in memory only: typed in the prompt, or
 	// kept because the credential store failed. It wins over the store, as
 	// it is the newest one known.
@@ -91,10 +98,11 @@ type Manager struct {
 	connect Connector
 	post    func(func())
 
-	entries map[string]*entry
-	tests   map[int]*testRun
-	nextRun int
-	closed  bool
+	entries   map[string]*entry
+	tests     map[int]*testRun
+	nextRun   int
+	nextEpoch uint64
+	closed    bool
 
 	// limbo holds the sessions of finished attempts whose result is still on
 	// its way to the UI thread. If the app quits before the result arrives
@@ -154,6 +162,14 @@ func (m *Manager) poster() func(func()) {
 		if post != nil {
 			post(fn)
 		}
+	}
+}
+
+// Post runs fn on the UI thread; it does nothing before SetPost, or after
+// the app quit and the event loop dropped it.
+func (m *Manager) Post(fn func()) {
+	if m != nil {
+		m.poster()(fn)
 	}
 }
 
@@ -357,7 +373,60 @@ func (m *Manager) finish(id string, a *attempt, res attemptResult, pk *parked) {
 		e.status, e.err = Failed, asError(res.err, res.password)
 	default:
 		e.status, e.adapter = Connected, res.adapter
+		m.nextEpoch++
+		e.epoch = m.nextEpoch
+		e.sessionCtx, e.endSession = context.WithCancel(context.Background())
 	}
+}
+
+// stopSession stops the work running on the session of e.
+func (e *entry) stopSession() {
+	if e.endSession != nil {
+		e.endSession()
+		e.endSession = nil
+	}
+}
+
+// SQL returns the relational session of a connected profile. The second
+// result is false when the connection is not connected or its driver has no
+// relational session.
+func (m *Manager) SQL(id string) (database.SQLAdapter, bool) {
+	if m == nil {
+		return nil, false
+	}
+	e := m.entries[id]
+	if e == nil || e.status != Connected || e.adapter == nil {
+		return nil, false
+	}
+	ad, ok := e.adapter.(database.SQLAdapter)
+	return ad, ok
+}
+
+// Epoch identifies the current session of a connection; it is 0 when there
+// is none. A new session, even after a reconnect, has a new number.
+func (m *Manager) Epoch(id string) uint64 {
+	if m == nil {
+		return 0
+	}
+	if e := m.entries[id]; e != nil && e.status == Connected {
+		return e.epoch
+	}
+	return 0
+}
+
+// SessionContext returns a context that ends when the session of the
+// connection does (disconnect, delete, quit). Work started on the session
+// derives its context from it. With no session it returns a context that
+// is already canceled.
+func (m *Manager) SessionContext(id string) context.Context {
+	if m != nil {
+		if e := m.entries[id]; e != nil && e.status == Connected && e.sessionCtx != nil {
+			return e.sessionCtx
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	return ctx
 }
 
 // Disconnect cancels a running attempt and closes the session. The profile
@@ -374,6 +443,7 @@ func (m *Manager) Disconnect(id string) {
 		e.running.cancel()
 		e.running = nil
 	}
+	e.stopSession()
 	closeAsync(e.adapter)
 	e.adapter = nil
 	e.status, e.err, e.reason = Disconnected, nil, ""
@@ -600,6 +670,7 @@ func (m *Manager) CloseAll(timeout time.Duration) {
 		if e.running != nil {
 			e.running.cancel()
 		}
+		e.stopSession()
 		if e.adapter != nil {
 			adapters = append(adapters, e.adapter)
 		}

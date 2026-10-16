@@ -19,20 +19,20 @@ func open(t *testing.T, w *Workspace, conn, name string) *Tab {
 	if !ok {
 		t.Fatalf("no mock dataset for %s/%s", conn, name)
 	}
-	tab, _ := w.OpenTable(k, name, ds)
+	tab, _ := w.OpenTable(k, name, ds.Source())
 	return tab
 }
 
 func makeDirty(tab *Tab) {
-	orig := tab.Dataset.Value(0, 1)
-	tab.Drafts.Set(grid.CellRef{RowID: tab.Dataset.RowID(0), Col: 1}, orig, grid.Value{Kind: grid.KindText, Text: "edited"})
+	orig := tab.Source.Value(0, 1)
+	tab.Drafts.Set(grid.CellRef{RowID: tab.Source.RowID(0), Col: 1}, orig, grid.Value{Kind: grid.KindText, Text: "edited"})
 }
 
 func TestOpenTableFocusesExistingTab(t *testing.T) {
 	var w Workspace
 	k := key("local-pg", "users")
 	ds, _ := mock.DatasetFor(k.ConnectionID, k.Ref)
-	first, created := w.OpenTable(k, "users", ds)
+	first, created := w.OpenTable(k, "users", ds.Source())
 	if !created {
 		t.Fatal("first open did not create a tab")
 	}
@@ -40,11 +40,11 @@ func TestOpenTableFocusesExistingTab(t *testing.T) {
 	if w.ActiveID != other.ID {
 		t.Fatal("opening orders did not activate it")
 	}
-	again, created := w.OpenTable(k, "users", ds)
+	again, created := w.OpenTable(k, "users", ds.Source())
 	if created || again != first || len(w.Tabs) != 2 || w.ActiveID != first.ID {
 		t.Errorf("reopen: created=%v same=%v tabs=%d active=%d", created, again == first, len(w.Tabs), w.ActiveID)
 	}
-	if _, created := w.OpenTable(key("staging-pg", "users"), "users", ds); !created {
+	if _, created := w.OpenTable(key("staging-pg", "users"), "users", ds.Source()); !created {
 		t.Error("same table on another connection reused the tab")
 	}
 }

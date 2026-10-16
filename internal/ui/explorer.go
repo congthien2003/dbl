@@ -1,11 +1,14 @@
 package ui
 
 import (
+	"fmt"
 	"time"
 
 	mygoui "github.com/egoist/mygo/ui"
 
+	"dbl/internal/app"
 	"dbl/internal/connection"
+	"dbl/internal/database"
 )
 
 // revealDuration is how long rows take to fade in after their parent opens.
@@ -16,20 +19,51 @@ type nodeKind uint8
 const (
 	nodeFolder nodeKind = iota
 	nodeConnection
+	nodeDatabase
+	nodeSchema
+	nodeGroup // the "Tables" or "Views" of a schema
+	nodeTable // a table or a view
+	nodePlaceholder
 )
 
-// node is an item of the explorer tree: a folder or a saved connection.
+// node is an item of the explorer tree: a folder, a saved connection, or
+// something read from the database below a connection.
 type node struct {
 	kind  nodeKind
 	id    string // the folder ID or the profile ID
 	label string
+
+	// Below a connection:
+	connID string         // the connection the node belongs to
+	schema string         // for schemas, groups and tables
+	table  database.Table // for tables
+	detail string         // muted text after the label
+	failed bool           // a placeholder that stands for an error
+	errMsg string
 }
+
+// sep separates the parts of the ID of a node read from a database. It
+// cannot occur in the ID of a folder or a profile, so the IDs cannot clash.
+const sep = "\x1f"
 
 func folderItem(folderID string) string { return "folder:" + folderID }
 
-// explorer is the tree of folders and saved connections in the sidebar. It
-// is rebuilt from the catalog whenever the catalog changes. Databases,
-// schemas and tables below a connection arrive with Phase 2.2.
+func dbItem(conn string) string             { return "db" + sep + conn }
+func schemaItem(conn, schema string) string { return "sc" + sep + conn + sep + schema }
+func groupItem(conn, schema string, views bool) string {
+	if views {
+		return "gv" + sep + conn + sep + schema
+	}
+	return "gt" + sep + conn + sep + schema
+}
+func tableItem(conn, schema, name string) string {
+	return "tb" + sep + conn + sep + schema + sep + name
+}
+func placeholderItem(parent, what string) string { return "ph" + sep + parent + sep + what }
+
+// explorer is the tree of folders, saved connections and, below a connected
+// connection, its database, schemas, tables and views. It is rebuilt
+// whenever the catalog or what was read below the connections changes.
 type explorer struct {
 	state    mygoui.OutlineState[string]
 	row      int // the row chosen, -1 for none
@@ -39,8 +73,12 @@ type explorer struct {
 	parent   map[string]string   // "" for items at the top
 
 	rev    int // Catalog.Rev the tree was built from
+	exRev  int // ExplorerData.Rev the tree was built from
 	built  bool
-	opened map[string]bool // folders already seen, which start open
+	opened map[string]bool // folders and groups already seen, which start open
+	// autoOpened remembers the session (epoch) of each connection whose
+	// nodes were opened when it connected.
+	autoOpened map[string]uint64
 
 	// act is the choice made in a context menu during the frame, run once
 	// the outline is done (a choice that changes the tree must not run while
@@ -72,36 +110,56 @@ const (
 	actNewConnectionIn
 	actRenameFolder
 	actDeleteFolder
+	actRefresh   // read the node again
+	actOpenTable // open the Table Inspector
 )
 
 type explorerAction struct {
 	kind actionKind
-	id   string // the connection, or for folder actions the folder
+	id   string // the connection, or for folder actions the folder, or the node
 	arg  string // actMove: the destination folder ID, "" for the top level
 }
 
 func newExplorer() *explorer {
 	return &explorer{
-		row:      -1,
-		nodes:    map[string]node{},
-		children: map[string][]string{},
-		parent:   map[string]string{},
-		opened:   map[string]bool{},
-		prevOpen: map[string]bool{},
-		born:     map[string]time.Time{},
+		row:        -1,
+		nodes:      map[string]node{},
+		children:   map[string][]string{},
+		parent:     map[string]string{},
+		opened:     map[string]bool{},
+		autoOpened: map[string]uint64{},
+		prevOpen:   map[string]bool{},
+		born:       map[string]time.Time{},
 	}
 }
 
-// rebuild reads the catalog into the tree when it changed since the last
-// time. Folders start open the first time they appear.
-func (e *explorer) rebuild(cat *connection.Catalog) {
-	if e.built && e.rev == cat.Rev {
+// rebuild reads the catalog and what was read below the connections into
+// the tree when either changed since the last time. Folders start open the
+// first time they appear. Only the maps are rebuilt: what was read lives in
+// the app state, and which items are open lives in the outline state under
+// IDs that do not change, so a rename or a refresh loses neither.
+func (e *explorer) rebuild(st *app.State) {
+	cat := &st.Catalog
+	// Sessions come and go without the catalog changing; looking at each
+	// connection's tree is what notices them.
+	for _, p := range cat.Profiles {
+		st.Tree(p.ID)
+	}
+	if e.built && e.rev == cat.Rev && e.exRev == st.Explorer.Rev {
 		return
 	}
 	e.nodes = map[string]node{}
 	e.children = map[string][]string{}
 	e.parent = map[string]string{}
 	e.roots = e.roots[:0]
+	addConn := func(p connection.Profile, parent string) {
+		e.nodes[p.ID] = node{kind: nodeConnection, id: p.ID, label: p.Name, connID: p.ID}
+		if parent != "" {
+			e.parent[p.ID] = parent
+			e.children[parent] = append(e.children[parent], p.ID)
+		}
+		e.addDatabase(st, p)
+	}
 	for _, f := range cat.Folders {
 		id := folderItem(f.ID)
 		e.nodes[id] = node{kind: nodeFolder, id: f.ID, label: f.Name}
@@ -111,16 +169,136 @@ func (e *explorer) rebuild(cat *connection.Catalog) {
 			e.state.Open.Add(id)
 		}
 		for _, p := range cat.ProfilesIn(f.ID) {
-			e.nodes[p.ID] = node{kind: nodeConnection, id: p.ID, label: p.Name}
-			e.parent[p.ID] = id
-			e.children[id] = append(e.children[id], p.ID)
+			addConn(p, id)
 		}
 	}
 	for _, p := range cat.ProfilesIn("") {
-		e.nodes[p.ID] = node{kind: nodeConnection, id: p.ID, label: p.Name}
 		e.roots = append(e.roots, p.ID)
+		addConn(p, "")
 	}
-	e.rev, e.built = cat.Rev, true
+	e.rev, e.exRev, e.built = cat.Rev, st.Explorer.Rev, true
+}
+
+// link adds a node below parent.
+func (e *explorer) link(parent, id string, n node) {
+	e.nodes[id] = n
+	e.parent[id] = parent
+	e.children[parent] = append(e.children[parent], id)
+}
+
+// placeholder adds a row that stands for what is not there yet, or for the
+// error that kept it from being read. connID and schema say what a retry
+// reads again.
+func (e *explorer) placeholder(parent, what, label, connID, schema string, err *database.Error) {
+	n := node{kind: nodePlaceholder, label: label, connID: connID, schema: schema}
+	if err != nil {
+		n.failed, n.errMsg = true, err.Kind.String()+": "+err.Message
+		if err.Hint != "" {
+			n.errMsg += " " + err.Hint
+		}
+	}
+	e.link(parent, placeholderItem(parent, what), n)
+}
+
+// addDatabase adds what is read below a connected connection: its database,
+// the schemas, and below each schema its tables and views. Nothing is
+// added for a connection with no session, so it shows no arrow.
+func (e *explorer) addDatabase(st *app.State, p connection.Profile) {
+	tree := st.Tree(p.ID)
+	if tree == nil {
+		return
+	}
+	if e.autoOpened[p.ID] != tree.Epoch {
+		// A session just began: show the database, which is all there is
+		// to choose from for a PostgreSQL connection.
+		e.autoOpened[p.ID] = tree.Epoch
+		e.state.Open.Add(p.ID)
+		e.state.Open.Add(dbItem(p.ID))
+	}
+	db := dbItem(p.ID)
+	label := tree.Database
+	if label == "" {
+		label = p.Database
+	}
+	e.link(p.ID, db, node{kind: nodeDatabase, id: db, label: label, connID: p.ID})
+	switch {
+	case tree.State == app.OpFailed:
+		e.placeholder(db, "err", "Could not read the schemas", p.ID, "", tree.Err)
+		return
+	case tree.State != app.OpReady:
+		e.placeholder(db, "load", "Loading…", p.ID, "", nil)
+		return
+	case len(tree.Schemas) == 0:
+		e.placeholder(db, "none", "No schemas", p.ID, "", nil)
+		return
+	}
+	for _, sc := range tree.Schemas {
+		sid := schemaItem(p.ID, sc.Name)
+		e.link(db, sid, node{kind: nodeSchema, id: sid, label: sc.Name, connID: p.ID, schema: sc.Name})
+		switch {
+		case sc.State == app.OpFailed:
+			e.placeholder(sid, "err", "Could not read the tables", p.ID, sc.Name, sc.Err)
+			continue
+		case sc.State != app.OpReady:
+			e.placeholder(sid, "load", "Loading…", p.ID, sc.Name, nil)
+			continue
+		case len(sc.Tables) == 0:
+			e.placeholder(sid, "none", "No tables or views", p.ID, sc.Name, nil)
+			continue
+		}
+		var tables, views []database.Table
+		for _, t := range sc.Tables {
+			if t.Kind == database.ObjectView {
+				views = append(views, t)
+			} else {
+				tables = append(tables, t)
+			}
+		}
+		for _, g := range []struct {
+			views bool
+			label string
+			list  []database.Table
+		}{{false, "Tables", tables}, {true, "Views", views}} {
+			if len(g.list) == 0 {
+				continue
+			}
+			gid := groupItem(p.ID, sc.Name, g.views)
+			e.link(sid, gid, node{
+				kind: nodeGroup, id: gid, label: fmt.Sprintf("%s (%d)", g.label, len(g.list)),
+				connID: p.ID, schema: sc.Name,
+			})
+			if !e.opened[gid] {
+				e.opened[gid] = true
+				e.state.Open.Add(gid)
+			}
+			for _, t := range g.list {
+				tid := tableItem(p.ID, sc.Name, t.Ref.Name)
+				e.link(gid, tid, node{
+					kind: nodeTable, id: tid, label: t.Ref.Name,
+					connID: p.ID, schema: sc.Name, table: t, detail: t.Subtype,
+				})
+			}
+		}
+	}
+}
+
+// loadOpen reads what the nodes that are open need and have not got: the
+// schemas of an open database node, the tables of an open schema. Nothing
+// is read for a node that is closed, so connecting reads no metadata but
+// the schema list of the database.
+func (e *explorer) loadOpen(st *app.State) {
+	for id, n := range e.nodes {
+		switch n.kind {
+		case nodeDatabase:
+			if e.state.Open.Has(id) {
+				st.EnsureSchemas(n.connID)
+			}
+		case nodeSchema:
+			if e.state.Open.Has(id) {
+				st.EnsureTables(n.connID, n.schema)
+			}
+		}
+	}
 }
 
 func (e *explorer) childrenOf(id string) []string { return e.children[id] }
@@ -171,11 +349,12 @@ func (e *explorer) selected() (node, bool) {
 	return n, ok
 }
 
-// selectedConnection returns the connection of the row chosen, or "" when a
-// folder or nothing is chosen.
+// selectedConnection returns the connection of the row chosen (the
+// connection itself, or the one the node belongs to), or "" when a folder
+// or nothing is chosen.
 func (e *explorer) selectedConnection() string {
-	if n, ok := e.selected(); ok && n.kind == nodeConnection {
-		return n.id
+	if n, ok := e.selected(); ok && n.kind != nodeFolder {
+		return n.connID
 	}
 	return ""
 }
@@ -190,6 +369,9 @@ func (e *explorer) selectedFolder() string {
 	case n.kind == nodeFolder:
 		return n.id
 	}
+	if n.connID != "" {
+		n = e.nodes[n.connID]
+	}
 	if parent := e.parent[n.id]; parent != "" {
 		return e.nodes[parent].id
 	}
@@ -198,7 +380,7 @@ func (e *explorer) selectedFolder() string {
 
 func (sh *Shell) sidebar(c *mygoui.Context, t *mygoui.Theme) {
 	e := sh.explorer
-	e.rebuild(&sh.st.Catalog)
+	e.rebuild(sh.st)
 	readOnly := sh.st.ConnectionsReadOnly != ""
 	mygoui.Column(c).Fill().Padding(8).Gap(6).Background(t.Surface).Children(func() {
 		mygoui.Text(c, "CONNECTIONS").FontSize(11).Bold().TextColor(t.TextMuted)
@@ -213,6 +395,7 @@ func (sh *Shell) sidebar(c *mygoui.Context, t *mygoui.Theme) {
 				sh.explorerRow(c, t, id)
 			}).Grow(1).Label("Connections")
 			e.endPass()
+			e.loadOpen(sh.st)
 			if out.Submitted() {
 				sh.activateRow(e.row)
 				c.Invalidate()
@@ -259,23 +442,59 @@ func (sh *Shell) explorerRow(c *mygoui.Context, t *mygoui.Theme, id string) {
 		row.Opacity(fade).Translate(0, (fade-1)*6)
 		c.AnimationFrame()
 	}
-	if n.kind == nodeFolder {
+	switch n.kind {
+	case nodeFolder:
 		row.ContextMenu(func(m *mygoui.Menu) { sh.folderMenu(m, n) }).Children(func() {
 			mygoui.Text(c, n.label).SingleLine()
 		})
-		return
-	}
-	status := sh.st.Conns.Status(id)
-	glyph, color := statusGlyph(status, t)
-	row.ContextMenu(func(m *mygoui.Menu) { sh.connectionMenu(m, n) }).Children(func() {
-		mygoui.Text(c, glyph).TextColor(color).Label(status.String())
-		text := mygoui.Text(c, n.label).SingleLine()
-		if status == connection.Failed {
-			if err := sh.st.Conns.Err(id); err != nil {
-				text.Tooltip(err.Message)
+	case nodeConnection:
+		status := sh.st.Conns.Status(id)
+		glyph, color := statusGlyph(status, t)
+		row.ContextMenu(func(m *mygoui.Menu) { sh.connectionMenu(m, n) }).Children(func() {
+			mygoui.Text(c, glyph).TextColor(color).Label(status.String())
+			text := mygoui.Text(c, n.label).SingleLine()
+			if status == connection.Failed {
+				if err := sh.st.Conns.Err(id); err != nil {
+					text.Tooltip(err.Message)
+				}
 			}
-		}
-	})
+		})
+	case nodePlaceholder:
+		row.ContextMenu(func(m *mygoui.Menu) {
+			if n.failed && m.Item("Retry").Chosen() {
+				e.act = explorerAction{kind: actRefresh, id: id}
+			}
+		}).Children(func() {
+			text := mygoui.Text(c, n.label).SingleLine().Italic().TextColor(t.TextMuted)
+			if n.failed {
+				text.TextColor(t.Danger).Tooltip(n.errMsg)
+			}
+		})
+	default:
+		row.ContextMenu(func(m *mygoui.Menu) { sh.objectMenu(m, id, n) }).Children(func() {
+			text := mygoui.Text(c, n.label).SingleLine()
+			if n.kind == nodeTable && n.table.Kind == database.ObjectView {
+				text.Italic()
+			}
+			if n.detail != "" {
+				mygoui.Text(c, n.detail).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			}
+		})
+	}
+}
+
+// objectMenu is the context menu of a node read from the database.
+func (sh *Shell) objectMenu(m *mygoui.Menu, id string, n node) {
+	e := sh.explorer
+	if n.kind == nodeTable && m.Item("Open").Chosen() {
+		e.act = explorerAction{kind: actOpenTable, id: id}
+	}
+	if m.Item("Refresh").Chosen() {
+		e.act = explorerAction{kind: actRefresh, id: id}
+	}
+	if m.Item("New SQL tab").Chosen() {
+		e.act = explorerAction{kind: actNewSQL, id: n.connID}
+	}
 }
 
 func (sh *Shell) folderMenu(m *mygoui.Menu, n node) {
@@ -306,6 +525,9 @@ func (sh *Shell) connectionMenu(m *mygoui.Menu, n node) {
 	case connection.Connected:
 		if m.Item("Disconnect").Chosen() {
 			e.act = explorerAction{kind: actDisconnect, id: n.id}
+		}
+		if m.Item("Refresh").Chosen() {
+			e.act = explorerAction{kind: actRefresh, id: n.id}
 		}
 	default:
 		if m.Item("Connect").Disabled(!supported).Chosen() {
@@ -379,12 +601,55 @@ func (sh *Shell) runExplorerAction(c *mygoui.Context) {
 		}
 	case actDeleteFolder:
 		st.RequestDeleteFolder(a.id)
+	case actRefresh:
+		sh.refreshNode(a.id)
+	case actOpenTable:
+		sh.openTableNode(a.id)
 	}
 	c.Invalidate()
 }
 
-// activateRow handles Enter or a double click on an explorer row:
-// connections connect; folders open or close.
+// refreshNode reads a node of the explorer again: a connection or database
+// its schemas, a schema (or its tables group) its tables, a table the
+// metadata of its open tab. A retry on a placeholder refreshes its parent.
+func (sh *Shell) refreshNode(id string) {
+	e := sh.explorer
+	n, ok := e.nodes[id]
+	if !ok {
+		return
+	}
+	switch n.kind {
+	case nodeConnection, nodeDatabase:
+		sh.st.RefreshSchemas(n.connID)
+	case nodePlaceholder:
+		if n.schema != "" {
+			sh.st.RefreshTables(n.connID, n.schema)
+		} else {
+			sh.st.RefreshSchemas(n.connID)
+		}
+	case nodeSchema, nodeGroup:
+		sh.st.RefreshTables(n.connID, n.schema)
+	case nodeTable:
+		key := app.TableKey{ConnectionID: n.connID, Ref: n.table.Ref}
+		for _, tab := range sh.st.Workspace.TabsOf(n.connID) {
+			if tab.Kind == app.TabTable && tab.Table == key && tab.Data != nil {
+				sh.st.RefreshMetadata(tab)
+			}
+		}
+		sh.st.RefreshTables(n.connID, n.schema)
+	}
+}
+
+// openTableNode opens the Table Inspector of a table node.
+func (sh *Shell) openTableNode(id string) {
+	if n, ok := sh.explorer.nodes[id]; ok && n.kind == nodeTable {
+		sh.st.OpenTable(n.connID, n.table)
+	}
+}
+
+// activateRow handles Enter or a double click on an explorer row: a table
+// opens in the inspector, a connection that is not connected connects, and
+// anything else with children opens or closes.
 func (sh *Shell) activateRow(row int) {
 	e := sh.explorer
 	if row < 0 || row >= e.state.Rows() {
@@ -395,7 +660,16 @@ func (sh *Shell) activateRow(row int) {
 	if !ok {
 		return
 	}
-	if n.kind == nodeConnection {
+	switch {
+	case n.kind == nodeTable:
+		sh.st.OpenTable(n.connID, n.table)
+		return
+	case n.kind == nodePlaceholder:
+		if n.failed {
+			sh.refreshNode(id)
+		}
+		return
+	case n.kind == nodeConnection && sh.st.Conns.Status(n.id) != connection.Connected:
 		sh.st.Connect(n.id)
 		return
 	}
