@@ -23,7 +23,7 @@ func TestClosingDirtyTabAsksFirst(t *testing.T) {
 	if err := tt.Click("Close users"); err != nil {
 		t.Fatal(err)
 	}
-	if !tt.HasText("Discard changes?") {
+	if !tt.HasText("Close tab with unsaved edits?") {
 		t.Fatalf("no confirmation; texts %q", tt.Texts())
 	}
 	if sh.st.Workspace.Find(tab.ID) == nil {
@@ -35,7 +35,7 @@ func TestClosingDirtyTabAsksFirst(t *testing.T) {
 	if sh.st.Workspace.Find(tab.ID) == nil || !tab.Dirty() {
 		t.Fatal("Cancel did not keep the tab and its edits")
 	}
-	if tt.HasText("Discard changes?") {
+	if tt.HasText("Close tab with unsaved edits?") {
 		t.Error("the confirmation is still shown after Cancel")
 	}
 	if err := tt.Click("Close users"); err != nil {
@@ -70,8 +70,8 @@ func TestClosingCleanTabDoesNotAsk(t *testing.T) {
 	if err := tt.Click("Close users"); err != nil {
 		t.Fatal(err)
 	}
-	if tt.HasText("Discard changes?") || sh.st.Workspace.Find(tab.ID) != nil {
-		t.Errorf("clean tab: prompt shown=%v, tab present=%v", tt.HasText("Discard changes?"), sh.st.Workspace.Find(tab.ID) != nil)
+	if tt.HasText("Close tab with unsaved edits?") || sh.st.Workspace.Find(tab.ID) != nil {
+		t.Errorf("clean tab: prompt shown=%v, tab present=%v", tt.HasText("Close tab with unsaved edits?"), sh.st.Workspace.Find(tab.ID) != nil)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestQuitPromptWhenDirty(t *testing.T) {
 		t.Fatal("RequestQuit allowed leaving with unsaved edits")
 	}
 	tt.Frame()
-	if !tt.HasText("Discard changes and exit?") {
+	if !tt.HasText("Exit with unsaved edits?") {
 		t.Fatalf("no quit confirmation; texts %q", tt.Texts())
 	}
 	if err := tt.Click("Cancel"); err != nil {

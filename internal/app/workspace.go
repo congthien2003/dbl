@@ -47,6 +47,9 @@ type Tab struct {
 // dirty in Phase 1 (their protection arrives with local files).
 func (t *Tab) Dirty() bool { return t.Kind == TabTable && t.Drafts.Len() > 0 }
 
+// Saving reports whether a Save of the tab is running.
+func (t *Tab) Saving() bool { return t.Data != nil && t.Data.SaveState == OpLoading }
+
 // Workspace is the ordered list of open tabs and the active one.
 type Workspace struct {
 	Tabs     []*Tab

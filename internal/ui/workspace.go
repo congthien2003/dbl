@@ -80,15 +80,28 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 		if tab.Source != nil && tab.Source.ReadOnly() {
 			mygoui.Text(c, "Read-only").FontSize(12).TextColor(t.TextMuted)
 		}
+		if tab.Saving() {
+			mygoui.Spinner(c).Label("Saving")
+			mygoui.Text(c, "Saving…").FontSize(12).TextColor(t.TextMuted)
+		}
 		if n := tab.Drafts.Len(); n > 0 {
 			mygoui.Text(c, fmt.Sprintf("%d unsaved edit(s)", n)).FontSize(12).TextColor(t.Warning)
 		}
-		if tab.Data == nil {
-			if sh.fade(mygoui.Button(c, "Revert changes")).Padding(2, 8).FontSize(12).Disabled(!tab.Dirty()).Clicked() {
+		if tab.Data == nil || !tab.Data.ReadOnly() || tab.Dirty() {
+			idle := !tab.Dirty() || tab.Saving()
+			if sh.fade(mygoui.Button(c, "Revert changes")).Padding(2, 8).FontSize(12).Disabled(idle).Clicked() {
 				v.grid.revert(c, tab)
+			}
+			if tab.Data != nil {
+				if sh.fade(mygoui.PrimaryButton(c, "Save")).Label("Save changes").Padding(2, 8).FontSize(12).Disabled(idle).Clicked() {
+					sh.save(c, tab, v)
+				}
 			}
 		}
 	})
+	if tab.Data != nil && tab.Dirty() && !tab.Saving() && c.Shortcut(mygoui.Cmd, mygoui.KeyS) {
+		sh.save(c, tab, v)
+	}
 	if d == nil {
 		// A source that is not a database table (tests): the grid alone.
 		if v.section == 1 {
@@ -122,6 +135,7 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 			errorBanner(c, t, d.MetaErr, "The metadata could not be refreshed.")
 		})
 	}
+	sh.editBanners(c, t, tab)
 	if v.section == 1 {
 		properties(c, t, d.Meta)
 		return
@@ -130,6 +144,19 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 		v.filter = newFilterBar()
 	}
 	v.filter.build(c, t, sh, tab)
+	if d.ReadOnly() {
+		_, why := d.Meta.Editable()
+		if why == "" {
+			why = "No column of this table can be edited."
+		}
+		mygoui.Row(c).Padding(2, 12).Children(func() {
+			mygoui.Text(c, "Read-only: "+why).FontSize(12).TextColor(t.TextMuted)
+		})
+	} else if note := v.grid.note(tab); note != "" {
+		mygoui.Row(c).Padding(2, 12).Children(func() {
+			mygoui.Text(c, note).FontSize(12).TextColor(t.TextMuted)
+		})
+	}
 	if d.Plan.Warning != "" {
 		mygoui.Row(c).Padding(2, 12).Children(func() {
 			mygoui.Text(c, "⚠ "+d.Plan.Warning).FontSize(12).TextColor(t.Warning)
@@ -167,6 +194,55 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 		v.grid.build(c, sh.st, tab, p)
 	}
 	sh.pagingBar(c, t, tab)
+}
+
+// save writes the edits of a table tab. A cell being typed in is kept first,
+// so what is on screen is what is saved.
+func (sh *Shell) save(c *mygoui.Context, tab *app.Tab, v *tabView) {
+	if v.grid.edit != nil {
+		v.grid.commit(c, tab)
+	}
+	sh.st.Save(tab, nil)
+	c.Invalidate()
+}
+
+// editBanners shows the outcome of the last Save, and the state of the rows
+// after a Save that was committed.
+func (sh *Shell) editBanners(c *mygoui.Context, t *mygoui.Theme, tab *app.Tab) {
+	d := tab.Data
+	if se := d.SaveErr; se != nil {
+		text, color := "", t.Danger
+		if se.Outcome == database.SaveUnknown {
+			color = t.Warning
+		} else {
+			text = "Nothing was saved. "
+		}
+		text += se.Err.Kind.String() + ": " + se.Err.Message
+		if se.Err.Hint != "" {
+			text += " " + se.Err.Hint
+		}
+		mygoui.Row(c).Padding(4, 12).Gap(8).AlignItems(mygoui.Center).Children(func() {
+			mygoui.Text(c, text).TextColor(color)
+			if se.Outcome == database.SaveNotApplied && se.HasRow {
+				mygoui.Text(c, "The row is marked in the grid. Your edits are kept.").FontSize(12).TextColor(t.TextMuted)
+			}
+		})
+	}
+	if !d.Stale {
+		return
+	}
+	mygoui.Row(c).Padding(4, 12).Gap(8).AlignItems(mygoui.Center).Children(func() {
+		if d.PageState == app.OpLoading {
+			mygoui.Spinner(c).Label("Reading the rows again")
+			mygoui.Text(c, "Saved. Reading the rows again…").TextColor(t.TextMuted)
+			return
+		}
+		mygoui.Text(c, "Saved. The table could not be read again, so the rows shown are from before the save and cannot be edited.").TextColor(t.Warning)
+		if sh.fade(mygoui.Button(c, "Reload")).Label("Reload after save").Clicked() {
+			sh.st.ReloadTable(tab)
+			c.Invalidate()
+		}
+	})
 }
 
 // centered draws content in the middle of the room left.

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -210,30 +211,98 @@ func (sh *Shell) dialogs(c *mygoui.Context, t *mygoui.Theme) {
 	sh.nameDialogView(c, t)
 	sh.connectionDialogs(c)
 	sh.passwordPromptView(c, t)
-	if sh.st.PendingClose != 0 {
-		open := true
-		switch mygoui.AlertDialog(c, &open, "Discard changes?",
-			"This tab has unsaved edits. Closing it discards them.", "Cancel", "Discard") {
-		case 1:
-			sh.st.ConfirmClose()
-			c.Invalidate()
-		case 0, mygoui.AlertDismissed:
-			sh.st.CancelClose()
-			c.Invalidate()
+	sh.editDialogs(c)
+}
+
+// canSave reports whether any of the tabs holds edits that can be saved now:
+// a tab that is being saved already has its Save under way.
+func canSave(tabs []*app.Tab) bool {
+	for _, t := range tabs {
+		if t.Dirty() && t.Data != nil && !t.Saving() {
+			return true
 		}
 	}
-	if sh.st.PendingQuit {
+	return false
+}
+
+// savingNote warns that a Save is still running.
+func savingNote(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return " A save is still running; stopping it now may leave its result unknown."
+}
+
+// editDialogs asks what to do with unsaved edits: before an action that would
+// replace the rows of a table, before closing a tab and before leaving the
+// window. Each offers Cancel, Discard and (for a table that can save) Save.
+func (sh *Shell) editDialogs(c *mygoui.Context) {
+	st := sh.st
+	if pe := st.PendingEdit; pe != nil {
+		tab := st.Workspace.Find(pe.Tab)
+		if tab == nil {
+			st.PendingEdit = nil
+			return
+		}
+		msg := fmt.Sprintf("%s has unsaved edits. Save them or discard them before you %s.", plural(tab.Drafts.Len(), "cell"), pe.Reason)
 		open := true
-		switch mygoui.AlertDialog(c, &open, "Discard changes and exit?",
-			"Some tabs have unsaved edits. Exiting discards them.", "Cancel", "Discard and exit") {
+		switch mygoui.AlertDialog(c, &open, "Unsaved edits", msg, "Cancel", "Discard", "Save and continue") {
 		case 1:
-			sh.st.CancelQuit()
+			st.ResolvePendingEdit(app.EditDiscard)
+			c.Invalidate()
+		case 2:
+			st.ResolvePendingEdit(app.EditSave)
+			c.Invalidate()
+		case 0, mygoui.AlertDismissed:
+			st.ResolvePendingEdit(app.EditCancel)
+			c.Invalidate()
+		}
+		return
+	}
+	if id := st.PendingClose; id != 0 {
+		tab := st.Workspace.Find(id)
+		if tab == nil {
+			st.CancelClose()
+			return
+		}
+		msg := "This tab has unsaved edits. Closing it discards them." + savingNote(st.SavingTabs())
+		buttons := []string{"Cancel", "Discard"}
+		if canSave([]*app.Tab{tab}) {
+			buttons = append(buttons, "Save and close")
+		}
+		open := true
+		switch mygoui.AlertDialog(c, &open, "Close tab with unsaved edits?", msg, buttons...) {
+		case 1:
+			st.ConfirmClose()
+			c.Invalidate()
+		case 2:
+			st.SaveAndClose()
+			c.Invalidate()
+		case 0, mygoui.AlertDismissed:
+			st.CancelClose()
+			c.Invalidate()
+		}
+		return
+	}
+	if st.PendingQuit {
+		msg := "Some tabs have unsaved edits. Exiting discards them." + savingNote(st.SavingTabs())
+		buttons := []string{"Cancel", "Discard and exit"}
+		if canSave(st.Workspace.DirtyTabs()) {
+			buttons = append(buttons, "Save and exit")
+		}
+		open := true
+		switch mygoui.AlertDialog(c, &open, "Exit with unsaved edits?", msg, buttons...) {
+		case 1:
+			st.CancelQuit()
 			c.Invalidate()
 			if sh.OnQuitConfirmed != nil {
 				sh.OnQuitConfirmed()
 			}
+		case 2:
+			st.SaveAndQuit(sh.OnQuitConfirmed)
+			c.Invalidate()
 		case 0, mygoui.AlertDismissed:
-			sh.st.CancelQuit()
+			st.CancelQuit()
 			c.Invalidate()
 		}
 	}

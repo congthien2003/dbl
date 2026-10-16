@@ -1,5 +1,10 @@
 package grid
 
+import (
+	"cmp"
+	"slices"
+)
+
 // CellRef identifies a cell by its row's identity and its column index.
 // RowID is a stable identity, never derived from display strings.
 type CellRef struct {
@@ -44,3 +49,28 @@ func (d *Drafts) Len() int { return len(d.m) }
 
 // Revert drops every draft.
 func (d *Drafts) Revert() { clear(d.m) }
+
+// Refs returns the cells that have a draft, ordered by row and then column.
+func (d *Drafts) Refs() []CellRef {
+	out := make([]CellRef, 0, len(d.m))
+	for ref := range d.m {
+		out = append(out, ref)
+	}
+	slices.SortFunc(out, func(a, b CellRef) int {
+		if c := cmp.Compare(a.RowID, b.RowID); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Col, b.Col)
+	})
+	return out
+}
+
+// HasRow reports whether any cell of the row has a draft.
+func (d *Drafts) HasRow(rowID int64) bool {
+	for ref := range d.m {
+		if ref.RowID == rowID {
+			return true
+		}
+	}
+	return false
+}

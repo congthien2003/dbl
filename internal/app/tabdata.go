@@ -22,7 +22,10 @@ type Page struct {
 	Rows [][]grid.Value
 	// Keys holds the canonical identity of each row (the text of its key
 	// columns), or nil when the table has no verified identity.
-	Keys   []string
+	Keys []string
+	// IDs holds the stable grid row number of each row (see TableData.RowID),
+	// or nil together with Keys.
+	IDs    []int64
 	Number int // 1 for the first page
 	// Req is the request that produced the page; reloading repeats it.
 	Req              database.PageRequest
@@ -60,10 +63,38 @@ type TableData struct {
 	// belonged to the old rows (the selection).
 	PageSeq int
 
+	// Editing (Phase 2.3). Edits live in Tab.Drafts, keyed by the stable row
+	// number; snapshots hold, for each row that has a draft, the row as it was
+	// loaded when the first edit was made. A Save is built from the snapshots
+	// and the drafts only, never from Page, so replacing the page can never
+	// send an edit to another row.
+	snapshots map[int64]*RowSnapshot
+	rowIDs    map[string]int64
+	lastRowID int64
+
+	SaveState OpState
+	// SaveErr is the error of the last Save; its Outcome says whether the
+	// database is known to be unchanged.
+	SaveErr *database.SaveError
+	// RowErrors holds, by row number, why a row could not be saved.
+	RowErrors map[int64]string
+	// Stale is set once a Save is committed and cleared when a page is read
+	// again: until then the rows shown are older than the save, so they
+	// cannot be edited.
+	Stale bool
+
 	cols   []grid.Column
 	cache  *grid.Cache[*Page]
 	metaOp opSlot
 	pageOp opSlot
+	saveOp opSlot
+}
+
+// RowSnapshot is a row as it was loaded: its identity and every value. It is
+// taken when the row gets its first draft.
+type RowSnapshot struct {
+	Key    []database.KeyValue
+	Values []grid.Value
 }
 
 func newTableData(key TableKey, info database.Table) *TableData {
@@ -80,8 +111,10 @@ func (d *TableData) release() {
 	}
 	d.metaOp.stop()
 	d.pageOp.stop()
+	d.saveOp.stop()
 	d.cache.Clear()
 	d.Page = nil
+	d.snapshots = nil
 }
 
 // Loading reports whether a read is running.
@@ -112,8 +145,52 @@ func (d *TableData) Value(row, col int) grid.Value {
 	return d.Page.Rows[row][col]
 }
 
-// RowID implements grid.Source.
-func (d *TableData) RowID(row int) int64 { return int64(row) + 1 }
+// RowID implements grid.Source. For a table with a verified identity it is a
+// number given to the row's key for the life of the tab, so the same row has
+// the same number on every page and after every reload, and two rows never
+// share one. Without an identity nothing can be edited, and it is the
+// position in the page.
+func (d *TableData) RowID(row int) int64 {
+	if d.Page != nil && row >= 0 && row < len(d.Page.IDs) {
+		return d.Page.IDs[row]
+	}
+	return int64(row) + 1
+}
+
+// intern returns the number of a row key.
+func (d *TableData) intern(key string) int64 {
+	if id, ok := d.rowIDs[key]; ok {
+		return id
+	}
+	if d.rowIDs == nil {
+		d.rowIDs = map[string]int64{}
+	}
+	d.lastRowID++
+	d.rowIDs[key] = d.lastRowID
+	return d.lastRowID
+}
+
+// EditLock says why the cells cannot be edited at this moment, or "" when
+// they can.
+func (d *TableData) EditLock() string {
+	switch {
+	case d.Meta == nil:
+		return "The table is not read yet."
+	case !d.Meta.HasEditableColumn():
+		_, why := d.Meta.Editable()
+		if why == "" {
+			why = "No column of this table can be edited."
+		}
+		return why
+	case d.SaveState == OpLoading:
+		return "Saving…"
+	case d.Stale:
+		return "The changes were saved, but the table was not read again. Reload it to edit."
+	case d.Loading():
+		return "Loading…"
+	}
+	return ""
+}
 
 type pageRow struct{ page, row int }
 
@@ -130,8 +207,8 @@ func (d *TableData) RowKey(row int) any {
 	return pageRow{n, row}
 }
 
-// ReadOnly implements grid.Source. Phase 2.2 reads only.
-func (d *TableData) ReadOnly() bool { return true }
+// ReadOnly implements grid.Source: nothing in the table can be edited.
+func (d *TableData) ReadOnly() bool { return d.Meta == nil || !d.Meta.HasEditableColumn() }
 
 func columnWidth(c database.ColumnClass) float32 {
 	switch c {
@@ -152,9 +229,11 @@ func columnWidth(c database.ColumnClass) float32 {
 func buildColumns(m *database.TableMetadata) []grid.Column {
 	cols := make([]grid.Column, len(m.Columns))
 	for i, c := range m.Columns {
+		ok, why := m.CanEditColumn(c.Name)
 		cols[i] = grid.Column{
 			Name: c.Name, NativeType: c.NativeType, Kind: c.Class.GridKind(),
 			Width: columnWidth(c.Class), Sortable: c.Class.Sortable(), PrimaryKey: c.PrimaryKey,
+			Editable: ok, Reason: why,
 		}
 	}
 	return cols
@@ -273,6 +352,10 @@ func (d *TableData) buildPage(req database.PageRequest, number int, res *databas
 			}
 			p.Keys[r] = b.String()
 		}
+		p.IDs = make([]int64, len(p.Keys))
+		for i, k := range p.Keys {
+			p.IDs[i] = d.intern(k)
+		}
 	}
 	return p
 }
@@ -350,30 +433,59 @@ func (s *State) finishMetadata(id TabID, d *TableData, o *op, m *database.TableM
 	}
 	first := d.Meta == nil
 	old := d.Meta
-	d.Meta, d.MetaState, d.MetaErr = m, OpReady, nil
 
 	// A sort or filter on a column that is gone, or no longer applies, is
 	// dropped rather than sent.
+	sort, filter := d.Sort, d.Filter
 	dropped := false
-	if d.Sort != nil {
-		if c, ok := m.Column(d.Sort.Column); !ok || !c.Class.Sortable() {
-			d.Sort, dropped = nil, true
+	if sort != nil {
+		if c, ok := m.Column(sort.Column); !ok || !c.Class.Sortable() {
+			sort, dropped = nil, true
 		}
 	}
-	if d.Filter != nil {
-		if c, ok := m.Column(d.Filter.Column); !ok || !database.Allows(c.Class, d.Filter.Op) {
-			d.Filter, dropped = nil, true
+	if filter != nil {
+		if c, ok := m.Column(filter.Column); !ok || !database.Allows(c.Class, filter.Op) {
+			filter, dropped = nil, true
 		}
 	}
-	oldPlan := d.Plan
-	d.Plan = database.PlanQuery(m, d.Sort)
+	plan := database.PlanQuery(m, sort)
+	reset := first || dropped || !sameLayout(old, m) || !slices.Equal(d.Plan.Key, plan.Key) || d.Plan.Strategy != plan.Strategy
+	if (tab.Dirty() || d.SaveState == OpLoading) && (reset || !sameEditing(old, m)) {
+		// The edits belong to the table as it was read. A refresh that would
+		// change what they mean is not applied; refreshing never overwrites
+		// edits.
+		d.MetaErr = &database.Error{
+			Kind:    database.KindMetadataUnavailable,
+			Message: "The table structure changed since it was read.",
+			Hint:    "Save or discard your edits, then refresh again.",
+		}
+		return
+	}
+	d.Meta, d.MetaState, d.MetaErr = m, OpReady, nil
+	d.Sort, d.Filter, d.Plan = sort, filter, plan
 	d.cols = buildColumns(m)
-	if first || dropped || !sameLayout(old, m) || !slices.Equal(oldPlan.Key, d.Plan.Key) || oldPlan.Strategy != d.Plan.Strategy {
+	if reset {
 		d.cache.Clear()
 		d.Page = nil
 		d.PageSeq++
 		s.fetchPage(tab, navFirst)
 	}
+}
+
+// sameEditing reports whether the same columns can be edited in both reads of
+// the metadata, and the rows are identified by the same key.
+func sameEditing(a, b *database.TableMetadata) bool {
+	if a == nil || b == nil || !slices.Equal(a.Identity.Columns, b.Identity.Columns) {
+		return false
+	}
+	for _, c := range a.Columns {
+		x, _ := a.CanEditColumn(c.Name)
+		y, _ := b.CanEditColumn(c.Name)
+		if x != y {
+			return false
+		}
+	}
+	return true
 }
 
 func sameLayout(a, b *database.TableMetadata) bool {
@@ -422,7 +534,14 @@ func (s *State) fetchPage(tab *Tab, nav navKind) {
 
 func (s *State) finishPage(id TabID, d *TableData, o *op, req database.PageRequest, number int, res *database.PageResult, err error) {
 	ok := d.pageOp.finish(s, d.Key.ConnectionID, o)
-	if !ok || s.liveTab(id, d) == nil {
+	tab := s.liveTab(id, d)
+	if !ok || tab == nil {
+		return
+	}
+	if tab.Dirty() {
+		// The edits belong to the rows in view: a read that was already on its
+		// way does not replace them. (Save, Discard and Cancel decide first.)
+		d.PageState, d.PageErr = OpReady, nil
 		return
 	}
 	if err != nil {
@@ -439,39 +558,52 @@ func (s *State) finishPage(id TabID, d *TableData, o *op, req database.PageReque
 	}
 	d.cache.Put(d.cacheKey(req, number), p)
 	d.Page, d.PageState, d.PageErr = p, OpReady, nil
+	d.Stale = false
 	d.PageSeq++
 }
 
-// ReloadTable reads the page in view again, bypassing the cache.
+// ReloadTable reads the page in view again, bypassing the cache. With unsaved
+// edits it asks first (see PendingEdit).
 func (s *State) ReloadTable(tab *Tab) {
 	if tab.Data == nil {
 		return
 	}
-	d := tab.Data
-	d.cache.Clear()
-	if d.Meta == nil {
-		s.loadMetadata(tab)
-		return
-	}
-	s.fetchPage(tab, navReload)
+	_ = s.guarded(tab, "reload the table", func() {
+		d := tab.Data
+		d.cache.Clear()
+		if d.Meta == nil {
+			s.loadMetadata(tab)
+			return
+		}
+		s.fetchPage(tab, navReload)
+	})
 }
 
 // RefreshMetadata reads the metadata of a table tab again. The page in view
 // stays unless the layout of the table changed.
 func (s *State) RefreshMetadata(tab *Tab) { s.loadMetadata(tab) }
 
-// NextPage shows the page after the one in view.
-func (s *State) NextPage(tab *Tab) { s.fetchPage(tab, navNext) }
+// NextPage shows the page after the one in view. With unsaved edits it asks
+// first.
+func (s *State) NextPage(tab *Tab) {
+	_ = s.guarded(tab, "go to the next page", func() { s.fetchPage(tab, navNext) })
+}
 
-// PrevPage shows the page before the one in view.
-func (s *State) PrevPage(tab *Tab) { s.fetchPage(tab, navPrev) }
+// PrevPage shows the page before the one in view. With unsaved edits it asks
+// first.
+func (s *State) PrevPage(tab *Tab) {
+	_ = s.guarded(tab, "go to the previous page", func() { s.fetchPage(tab, navPrev) })
+}
 
-// FirstPage shows the first page.
-func (s *State) FirstPage(tab *Tab) { s.fetchPage(tab, navFirst) }
+// FirstPage shows the first page. With unsaved edits it asks first.
+func (s *State) FirstPage(tab *Tab) {
+	_ = s.guarded(tab, "go to the first page", func() { s.fetchPage(tab, navFirst) })
+}
 
 // SetSort sorts the table by a column, or clears the sort for nil. The first
 // page of the new order is read; the request in flight stops. A sort the
-// column cannot take is refused and changes nothing.
+// column cannot take is refused and changes nothing. With unsaved edits it
+// asks first and returns ErrEditsPending: nothing changed yet.
 func (s *State) SetSort(tab *Tab, sort *database.Sort) error {
 	d := tab.Data
 	if d == nil || d.Meta == nil {
@@ -484,16 +616,18 @@ func (s *State) SetSort(tab *Tab, sort *database.Sort) error {
 	if sortEq(sort, d.Sort) {
 		return nil
 	}
-	d.Sort = sort
-	d.Plan = database.PlanQuery(d.Meta, sort)
-	d.cache.Clear()
-	s.fetchPage(tab, navFirst)
-	return nil
+	return s.guarded(tab, "change the sort", func() {
+		d.Sort = sort
+		d.Plan = database.PlanQuery(d.Meta, sort)
+		d.cache.Clear()
+		s.fetchPage(tab, navFirst)
+	})
 }
 
 // SetFilter sets the one column filter, or clears it for nil. The filter
 // runs on the server: the first page of the result is read and the request
-// in flight stops. A filter the column cannot take is refused.
+// in flight stops. A filter the column cannot take is refused. With unsaved
+// edits it asks first and returns ErrEditsPending: nothing changed yet.
 func (s *State) SetFilter(tab *Tab, f *database.Filter) error {
 	d := tab.Data
 	if d == nil || d.Meta == nil {
@@ -506,8 +640,9 @@ func (s *State) SetFilter(tab *Tab, f *database.Filter) error {
 	if filterEq(f, d.Filter) {
 		return nil
 	}
-	d.Filter = f
-	d.cache.Clear()
-	s.fetchPage(tab, navFirst)
-	return nil
+	return s.guarded(tab, "change the filter", func() {
+		d.Filter = f
+		d.cache.Clear()
+		s.fetchPage(tab, navFirst)
+	})
 }

@@ -5,6 +5,7 @@ package fakedb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -24,9 +25,13 @@ type Table struct {
 // Adapter is the fake session.
 type Adapter struct {
 	// Hook, when set, runs at the start of every call with the call's name
-	// ("ListSchemas", "ListTables", "DescribeTable", "FetchPage"). A non-nil
+	// ("ListSchemas", "ListTables", "DescribeTable", "FetchPage",
+	// "SaveChanges"). A non-nil
 	// result is returned as the call's error. It may block until ctx ends.
 	Hook func(ctx context.Context, call string) error
+	// UnknownCommit makes SaveChanges write the changes and then report that
+	// the result of COMMIT is not known, as a lost connection would.
+	UnknownCommit bool
 
 	mu      sync.Mutex
 	schemas []database.Schema
@@ -35,6 +40,7 @@ type Adapter struct {
 	calls   []string
 	closed  bool
 	reqs    []database.PageRequest
+	saves   []database.SaveRequest
 }
 
 // New returns an adapter with no schemas.
@@ -81,6 +87,13 @@ func (a *Adapter) Requests() []database.PageRequest {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return append([]database.PageRequest(nil), a.reqs...)
+}
+
+// Saves returns the save requests received so far.
+func (a *Adapter) Saves() []database.SaveRequest {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]database.SaveRequest(nil), a.saves...)
 }
 
 // IsClosed reports whether Close was called.
@@ -329,4 +342,89 @@ func UsersTable(name string, n int) *Table {
 		})
 	}
 	return t
+}
+
+// SaveChanges implements database.SQLAdapter. It works on a copy of the rows
+// and keeps the copy only when every row is written, which is the atomicity of
+// the transaction of a real adapter.
+func (a *Adapter) SaveChanges(ctx context.Context, req database.SaveRequest) error {
+	notApplied := func(err error) error {
+		var se *database.SaveError
+		if errors.As(err, &se) {
+			return se
+		}
+		var de *database.Error
+		if !errors.As(err, &de) {
+			de = &database.Error{Kind: database.KindSave, Message: err.Error(), Err: err}
+		}
+		return &database.SaveError{Err: de}
+	}
+	if err := a.enter(ctx, "SaveChanges"); err != nil {
+		return notApplied(err)
+	}
+	a.mu.Lock()
+	a.saves = append(a.saves, req)
+	t := a.data[req.Meta.Ref.Schema+"."+req.Meta.Ref.Name]
+	a.mu.Unlock()
+	if t == nil {
+		return notApplied(&database.Error{Kind: database.KindMetadataUnavailable, Message: "no such table"})
+	}
+	if issues := database.ValidateChanges(req.Meta, req.Changes); len(issues) > 0 {
+		return notApplied(&database.Error{Kind: database.KindValidation, Message: issues[0].Message})
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	rows := make([][]grid.Value, len(t.Rows))
+	for i, r := range t.Rows {
+		rows[i] = append([]grid.Value(nil), r...)
+	}
+	m := req.Meta
+	for _, rc := range req.Changes.Rows {
+		var hits []int
+		for i, r := range rows {
+			if rowMatches(m, r, rc) {
+				hits = append(hits, i)
+			}
+		}
+		fail := func(kind database.Kind, msg string) error {
+			return &database.SaveError{Err: &database.Error{Kind: kind, Message: msg}, RowID: rc.RowID, HasRow: true}
+		}
+		switch {
+		case len(hits) == 0:
+			return fail(database.KindConflict, "The row was changed or deleted by someone else.")
+		case len(hits) > 1:
+			return fail(database.KindSave, fmt.Sprintf("The write would change %d rows; it was not applied.", len(hits)))
+		}
+		for _, ch := range rc.Cells {
+			rows[hits[0]][m.ColumnIndex(ch.Column)] = ch.Current
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return notApplied(&database.Error{Kind: database.KindCanceled, Message: "canceled", Err: err})
+	}
+	t.Rows = rows
+	if a.UnknownCommit {
+		return &database.SaveError{
+			Err:     &database.Error{Kind: database.KindConnection, Message: "The connection was lost while committing."},
+			Outcome: database.SaveUnknown,
+		}
+	}
+	return nil
+}
+
+// rowMatches reports whether a row is the one rc describes: it has the key and
+// still holds the original values of the columns being changed.
+func rowMatches(m *database.TableMetadata, r []grid.Value, rc database.RowChange) bool {
+	for _, k := range rc.Key {
+		if !r[m.ColumnIndex(k.Column)].Equal(k.Value) {
+			return false
+		}
+	}
+	for _, ch := range rc.Cells {
+		if !r[m.ColumnIndex(ch.Column)].Equal(ch.Original) {
+			return false
+		}
+	}
+	return true
 }

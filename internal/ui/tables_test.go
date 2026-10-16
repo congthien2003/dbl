@@ -100,7 +100,7 @@ func openUsers(t *testing.T, e *uiEnv) *app.Tab {
 func TestOpeningATableShowsTheFirstPage(t *testing.T) {
 	e, _ := newTablesEnv(t)
 	tab := openUsers(t, e)
-	for _, want := range []string{"user 1", "id", "name", "score", "Page 1 · rows 1–100", "Read-only"} {
+	for _, want := range []string{"user 1", "id", "name", "score", "Page 1 · rows 1–100", "Save"} {
 		if !e.tt.HasText(want) {
 			t.Errorf("missing %q: %q", want, e.tt.Texts())
 		}

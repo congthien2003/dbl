@@ -31,6 +31,7 @@ type PendingConn struct {
 	Name         string
 	Tabs         int // tabs open on the connection, which will be closed
 	DirtyTabs    int // of them, tabs with unsaved data, which will be lost
+	SavingTabs   int // of them, tabs being saved: closing may leave the result unknown
 
 	// For ConnApplyEdit: the profile to save, and what to do with its
 	// password.
@@ -237,15 +238,10 @@ func (s *State) SaveProfile(p connection.Profile, change connection.PasswordChan
 	}
 	if st := s.Conns.Status(p.ID); (st == connection.Connecting || st == connection.Connected) && affectsSession(existing, p, change) {
 		tabs := s.Workspace.TabsOf(p.ID)
-		dirty := 0
-		for _, t := range tabs {
-			if t.Dirty() {
-				dirty++
-			}
-		}
+		dirty, saving := countUnsaved(tabs)
 		s.PendingConn = &PendingConn{
 			Kind: ConnApplyEdit, ConnectionID: p.ID, Name: existing.Name,
-			Tabs: len(tabs), DirtyTabs: dirty, Profile: p, Password: change,
+			Tabs: len(tabs), DirtyTabs: dirty, SavingTabs: saving, Profile: p, Password: change,
 		}
 		return false, nil
 	}
@@ -313,17 +309,12 @@ func (s *State) RequestDisconnect(id string) (done bool) {
 		s.Conns.Disconnect(id)
 		return true
 	}
-	dirty := 0
-	for _, t := range tabs {
-		if t.Dirty() {
-			dirty++
-		}
-	}
+	dirty, saving := countUnsaved(tabs)
 	name := id
 	if p, ok := s.Catalog.Profile(id); ok {
 		name = p.Name
 	}
-	s.PendingConn = &PendingConn{Kind: ConnDisconnect, ConnectionID: id, Name: name, Tabs: len(tabs), DirtyTabs: dirty}
+	s.PendingConn = &PendingConn{Kind: ConnDisconnect, ConnectionID: id, Name: name, Tabs: len(tabs), DirtyTabs: dirty, SavingTabs: saving}
 	return false
 }
 
@@ -338,13 +329,8 @@ func (s *State) RequestDelete(id string) {
 		return
 	}
 	tabs := s.Workspace.TabsOf(id)
-	dirty := 0
-	for _, t := range tabs {
-		if t.Dirty() {
-			dirty++
-		}
-	}
-	s.PendingConn = &PendingConn{Kind: ConnDelete, ConnectionID: id, Name: p.Name, Tabs: len(tabs), DirtyTabs: dirty}
+	dirty, saving := countUnsaved(tabs)
+	s.PendingConn = &PendingConn{Kind: ConnDelete, ConnectionID: id, Name: p.Name, Tabs: len(tabs), DirtyTabs: dirty, SavingTabs: saving}
 }
 
 // ConfirmConn carries out PendingConn: the attempt is cancelled, the tabs of
@@ -356,6 +342,35 @@ func (s *State) ConfirmConn() {
 	if pc == nil {
 		return
 	}
+	s.runPendingConn(pc)
+}
+
+// SaveAndConfirmConn saves the tabs of the connection that have unsaved
+// edits, and carries out PendingConn once they are all committed. If a Save
+// fails nothing else happens: the session, the tabs and the profile stay.
+func (s *State) SaveAndConfirmConn() {
+	pc := s.PendingConn
+	s.PendingConn = nil
+	if pc == nil {
+		return
+	}
+	s.SaveAll(s.Workspace.TabsOf(pc.ConnectionID), func() { s.runPendingConn(pc) })
+}
+
+// countUnsaved counts the tabs with unsaved edits, and those being saved.
+func countUnsaved(tabs []*Tab) (dirty, saving int) {
+	for _, t := range tabs {
+		if t.Dirty() {
+			dirty++
+		}
+		if t.Saving() {
+			saving++
+		}
+	}
+	return dirty, saving
+}
+
+func (s *State) runPendingConn(pc *PendingConn) {
 	switch pc.Kind {
 	case ConnDisconnect:
 		s.closeTabsOf(pc.ConnectionID)

@@ -1,6 +1,11 @@
 package database
 
-import "dbl/internal/grid"
+import (
+	"fmt"
+	"slices"
+
+	"dbl/internal/grid"
+)
 
 // TableRef identifies a table or view (spec 6.2).
 type TableRef struct {
@@ -318,9 +323,9 @@ func (m *TableMetadata) ColumnIndex(name string) int {
 }
 
 // Editable reports whether rows of the table can be written back safely: it
-// is a table with a verified row identity. When it cannot, the reason says
-// why. Phase 2.2 only reads, but the answer is already computed from
-// metadata, never assumed.
+// is a table with a verified row identity whose key columns can be read back
+// and compared exactly. When it cannot, the reason says why. The answer is
+// computed from metadata, never assumed.
 func (m *TableMetadata) Editable() (bool, string) {
 	if m.Kind == ObjectView {
 		return false, "Views are read-only."
@@ -331,7 +336,48 @@ func (m *TableMetadata) Editable() (bool, string) {
 		}
 		return false, "The table has no verified row identity."
 	}
+	for _, k := range m.Identity.Columns {
+		if c, ok := m.Column(k); !ok || !c.Class.KeysetSafe() {
+			return false, fmt.Sprintf("The key column %q cannot be compared exactly, so rows cannot be told apart safely.", k)
+		}
+	}
 	return true, ""
+}
+
+// CanEditColumn reports whether the cells of a column can be edited, and if
+// not, why. It is the one place that decides: the grid, the validation and
+// the adapter all ask it. A column of the row identity cannot change (that
+// would change which row it is), nor can generated, identity and binary
+// columns (spec FR-005).
+func (m *TableMetadata) CanEditColumn(name string) (bool, string) {
+	if ok, why := m.Editable(); !ok {
+		return false, why
+	}
+	c, ok := m.Column(name)
+	if !ok {
+		return false, fmt.Sprintf("The table has no column %q.", name)
+	}
+	switch {
+	case slices.Contains(m.Identity.Columns, name):
+		return false, "This column identifies the row (" + m.Identity.String() + "); changing it would change which row it is."
+	case c.Generated:
+		return false, "This is a generated column; the server computes it."
+	case c.Identity == IdentityAlways || c.Identity == IdentityByDefault:
+		return false, "This is an identity column."
+	case c.Class == ClassBinary:
+		return false, "Binary values cannot be edited."
+	}
+	return true, ""
+}
+
+// HasEditableColumn reports whether any column of the table can be edited.
+func (m *TableMetadata) HasEditableColumn() bool {
+	for _, c := range m.Columns {
+		if ok, _ := m.CanEditColumn(c.Name); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolveIdentity sets m.Identity from the constraints and indexes read. It

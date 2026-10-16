@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"slices"
 	"time"
 
@@ -29,6 +30,12 @@ type filterBar struct {
 
 	refused *database.Filter // a filter the state refused, not sent again
 	err     string
+
+	// While the table has unsaved edits the filter is not applied as it is
+	// typed: a question about them would interrupt the typing. apply is set by
+	// the Apply button or Enter; asked is set once the state held the filter
+	// back for the user's answer.
+	apply, asked bool
 }
 
 func newFilterBar() *filterBar { return &filterBar{} }
@@ -89,13 +96,33 @@ func (fb *filterBar) build(c *mygoui.Context, t *mygoui.Theme, sh *Shell, tab *a
 		fb.op = labels[0]
 	}
 	needsValue := opByLabel(class, fb.op).NeedsValue()
+	dirty := tab.Dirty()
+	same := func(a, b *database.Filter) bool { return (a == nil && b == nil) || (a != nil && b != nil && *a == *b) }
+	if fb.asked && st.PendingEdit == nil && !tab.Saving() {
+		// The question was answered. If the edits are still there and nothing
+		// is being saved, the answer was Cancel (or the Save failed): the bar
+		// goes back to the filter that is applied. While the Save runs the
+		// answer is Save, and the filter is applied when it is committed.
+		fb.asked = false
+		if tab.Dirty() && !same(fb.desired(m), d.Filter) {
+			fb.restore(d.Filter)
+			return
+		}
+	}
 
 	mygoui.Row(c).Padding(4, 12).Gap(8).AlignItems(mygoui.Center).Children(func() {
 		mygoui.Text(c, "Filter").TextColor(t.TextMuted)
 		mygoui.Select(c, &fb.col, names).Label("Filter column")
 		mygoui.Select(c, &fb.op, labels).Label("Filter operator")
 		if needsValue {
-			mygoui.TextInput(c, &fb.text).Placeholder("Value").Label("Filter value").Width(240)
+			if mygoui.TextInput(c, &fb.text).Placeholder("Value").Label("Filter value").Width(240).Submitted() && dirty {
+				fb.apply = true
+			}
+		}
+		if dirty {
+			if sh.fade(mygoui.Button(c, "Apply")).Label("Apply filter").Clicked() {
+				fb.apply = true
+			}
 		}
 		if sh.fade(mygoui.Button(c, "Clear")).Disabled(fb.text == "" && d.Filter == nil).Clicked() {
 			fb.text = ""
@@ -118,19 +145,43 @@ func (fb *filterBar) build(c *mygoui.Context, t *mygoui.Theme, sh *Shell, tab *a
 	}
 	want := fb.desired(m)
 	have := d.Filter
-	same := func(a, b *database.Filter) bool { return (a == nil && b == nil) || (a != nil && b != nil && *a == *b) }
 	if same(want, have) || same(want, fb.refused) {
+		fb.apply = false
 		return
 	}
-	if wait := filterDebounce - c.Now().Sub(fb.changedAt); !fb.immediate && wait > 0 {
+	if dirty {
+		// With unsaved edits, only an explicit Apply asks the question.
+		if !fb.apply {
+			return
+		}
+		fb.apply = false
+	} else if wait := filterDebounce - c.Now().Sub(fb.changedAt); !fb.immediate && wait > 0 {
 		c.After(wait)
 		return
 	}
-	if err := st.SetFilter(tab, want); err != nil {
+	switch err := st.SetFilter(tab, want); {
+	case err == nil:
+		fb.refused = nil
+		c.Invalidate()
+	case errors.Is(err, app.ErrEditsPending):
+		fb.asked = true
+		c.Invalidate()
+	case errors.Is(err, app.ErrSaving):
+		fb.err = "Wait for the save to finish."
+	default:
 		fb.refused = want
 		fb.err = err.Error()
+	}
+}
+
+// restore puts the bar back to show the filter that is applied.
+func (fb *filterBar) restore(f *database.Filter) {
+	fb.refused = nil
+	if f == nil {
+		fb.text = ""
+		fb.last = [3]string{fb.col, fb.op, ""}
 		return
 	}
-	fb.refused = nil
-	c.Invalidate()
+	fb.col, fb.op, fb.text = f.Column, f.Op.Label(), f.Value
+	fb.last = [3]string{fb.col, fb.op, fb.text}
 }
