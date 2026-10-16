@@ -17,7 +17,8 @@ const maxCellRunes = 120
 // barRoom is the room the last row has under its cells, where the
 // horizontal scroll bar (6 DIPs, 3 above the edge) shows without covering
 // the values. The rows are a scroll container inside the table, out of reach
-// of Padding and ScrollbarInsets, so the cells of the last row are taller.
+// of Padding and ScrollbarInsets, so the cells of the last row are taller,
+// and only while the bar shows (gridView.barShown).
 const barRoom = 12
 
 // cellPos is a cell by the index of its visible row and its column.
@@ -61,6 +62,11 @@ type gridView struct {
 	// accent (gridTheme), which its rows and cells are built with; what
 	// needs the full accent takes it from base.
 	base *mygoui.Theme
+	// viewW is the width of the table, and barShown whether the columns are
+	// wider than it, so that the horizontal scroll bar shows: both as the
+	// last frame laid them out.
+	viewW    float32
+	barShown bool
 }
 
 func newGridView() *gridView { return &gridView{row: -1, cell: noCell} }
@@ -136,6 +142,20 @@ func (g *gridView) updateEdges(c *mygoui.Context) {
 		g.edges = edges
 		c.Invalidate()
 	}
+	// The columns run from the leftmost left edge to the rightmost right
+	// edge, wherever the table is scrolled to.
+	shown := false
+	if len(edges) > 0 && len(g.left) > 0 {
+		first := edges[len(edges)-1]
+		for _, x := range g.left {
+			first = min(first, x)
+		}
+		shown = edges[len(edges)-1]-first > g.viewW+0.5
+	}
+	if shown != g.barShown {
+		g.barShown = shown
+		c.Invalidate()
+	}
 }
 
 // newPage drops what belonged to the rows that were replaced: the
@@ -180,6 +200,7 @@ func (g *gridView) build(c *mygoui.Context, st *app.State, tab *app.Tab, p Palet
 		g.buildCell(c, tab, p, row, col)
 	}).Grow(1).Label("Grid")
 	c.SetTheme(g.base)
+	g.viewW = tbl.LayoutBounds().W
 	// The lines of the rows are drawn by the cells themselves, so they move
 	// with the rows. The lines between columns continue where there are no
 	// cells: under the last row, drawn below the table's children so the
@@ -247,7 +268,7 @@ func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, co
 	// less the padding MyGo's table gives a cell (Space(1.5) above and
 	// below, Space(2.5) at the sides).
 	box := mygoui.Row(c).Grow(1).AlignSelf(mygoui.Stretch).AlignItems(mygoui.Center)
-	if row == tab.Source.Len()-1 {
+	if row == tab.Source.Len()-1 && g.barShown {
 		box.Padding(0, 0, barRoom, 0)
 	}
 	padX, padY := t.Space(2.5), t.Space(1.5)

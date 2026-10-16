@@ -168,3 +168,31 @@ func TestDatasetWithPageOfDraftsShowsDraftText(t *testing.T) {
 		t.Error("tab does not show the unsaved marker")
 	}
 }
+
+func TestLastRowKeepsRoomForTheScrollBarOnlyWhileItShows(t *testing.T) {
+	sh, tt := newTestShell(t)
+	tab := openTable(t, sh, tt, "users")
+	g := gridOf(t, sh)
+	setWidths := func(w float32) {
+		widths := map[string]float32{}
+		for _, col := range tab.Source.Columns() {
+			widths[col.Name] = w
+		}
+		g.list.Columns.Widths = widths
+		// The edges and the bar are seen one frame after the layout.
+		tt.Frame()
+		tt.Frame()
+	}
+	setWidths(60)
+	if g.barShown {
+		t.Error("narrow columns fit the window, yet room is kept for the scroll bar")
+	}
+	setWidths(900)
+	if !g.barShown {
+		t.Error("columns wider than the window, yet no room is kept for the scroll bar")
+	}
+	setWidths(60)
+	if g.barShown {
+		t.Error("the columns fit again, yet room is still kept for the scroll bar")
+	}
+}
