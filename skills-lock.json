@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "to-tickets": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/to-tickets/SKILL.md",
+      "computedHash": "f7d1bca83f85e4880eec5ed4fe0bff5b8ad1ba14f1e0b17dd0f6d9235a461ec4"
+    }
+  }
+}
