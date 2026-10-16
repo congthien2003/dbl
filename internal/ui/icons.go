@@ -24,6 +24,8 @@ var icons = struct {
 	Schema             *mygoui.SVG
 	Table, View        *mygoui.SVG
 	PrimaryKey         *mygoui.SVG
+	Properties         *mygoui.SVG
+	Close              *mygoui.SVG
 }{
 	Folder:     icon("folder.svg"),
 	FolderOpen: icon("folder-minus.svg"),
@@ -33,6 +35,9 @@ var icons = struct {
 	Table:      icon("table.svg"),
 	View:       icon("grid-circle-diagonal-right.svg"),
 	PrimaryKey: icon("car-key.svg"),
+	Properties: icon("hashtag.svg"),
+	// Close is two strokes; resources/ has no file for it.
+	Close: mygoui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`)),
 }
 
 // keyIcon is an icon a column shows, with its color and its name.

@@ -22,7 +22,6 @@ func (sh *Shell) workspace(c *mygoui.Context, t *mygoui.Theme, p Palette) {
 			return
 		}
 		sh.tabStrip(c, t, p)
-		mygoui.Divider(c)
 		// The strip may have closed or switched tabs; show the current one.
 		if tab = ws.Active(); tab == nil {
 			return
@@ -41,32 +40,51 @@ func (sh *Shell) workspace(c *mygoui.Context, t *mygoui.Theme, p Palette) {
 // tableTab is the Table Inspector: Data (the grid) and Properties.
 func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *app.Tab, v *tabView) {
 	d := tab.Data
-	mygoui.Row(c).Padding(8, 12).Gap(12).AlignItems(mygoui.Center).Children(func() {
-		mygoui.Text(c, fmt.Sprintf("%s.%s", tab.Table.Ref.Schema, tab.Table.Ref.Name)).Bold()
-		mygoui.Segmented(c, &v.section, "Data", "Properties").Label("Section")
-		mygoui.Box(c).Grow(1)
-		if d != nil {
-			if d.Loading() {
-				mygoui.Spinner(c).Label("Loading")
-				mygoui.Text(c, "Loading…").TextColor(t.TextMuted)
+	mygoui.Row(c).Padding(4, 12).Gap(8).AlignItems(mygoui.Center).Children(func() {
+		// The two views of the table, as a small segmented control with icons.
+		seg := mygoui.SegmentedBase(c.Key("section"), &v.section, 2)
+		seg.Track.Padding(2).Radius(6).Background(t.Surface).Gap(2).Label("Section").Children(func() {
+			for i, s := range []struct {
+				name string
+				svg  *mygoui.SVG
+			}{{"Data", icons.Table}, {"Properties", icons.Properties}} {
+				item := seg.Segment(i).Padding(2, 8).Radius(4).Gap(4).AlignItems(mygoui.Center).Label(s.name)
+				if i == v.section {
+					item.Background(t.Background)
+				}
+				item.Children(func() {
+					mygoui.Icon(c, s.svg).FontSize(12)
+					mygoui.Text(c, s.name).FontSize(12)
+				})
 			}
-			if mygoui.Button(c, "Reload").Label("Reload data").Disabled(d.MetaState == app.OpLoading).Clicked() {
+		})
+		mygoui.Box(c).Grow(1)
+		if d != nil && d.Loading() {
+			mygoui.Spinner(c).Label("Loading")
+			mygoui.Text(c, "Loading…").FontSize(12).TextColor(t.TextMuted)
+		}
+		if mygoui.Button(c, "New SQL").Padding(2, 8).FontSize(12).Clicked() {
+			sh.newSQL()
+			c.Invalidate()
+		}
+		if d != nil {
+			if mygoui.Button(c, "Reload").Label("Reload data").Padding(2, 8).FontSize(12).Disabled(d.MetaState == app.OpLoading).Clicked() {
 				sh.st.ReloadTable(tab)
 				c.Invalidate()
 			}
-			if mygoui.Button(c, "Refresh metadata").Disabled(d.MetaState == app.OpLoading).Clicked() {
+			if mygoui.Button(c, "Refresh metadata").Padding(2, 8).FontSize(12).Disabled(d.MetaState == app.OpLoading).Clicked() {
 				sh.st.RefreshMetadata(tab)
 				c.Invalidate()
 			}
 		}
 		if tab.Source != nil && tab.Source.ReadOnly() {
-			mygoui.Text(c, "Read-only").TextColor(t.TextMuted)
+			mygoui.Text(c, "Read-only").FontSize(12).TextColor(t.TextMuted)
 		}
 		if n := tab.Drafts.Len(); n > 0 {
-			mygoui.Text(c, fmt.Sprintf("%d unsaved edit(s)", n)).TextColor(t.Warning)
+			mygoui.Text(c, fmt.Sprintf("%d unsaved edit(s)", n)).FontSize(12).TextColor(t.Warning)
 		}
 		if tab.Data == nil {
-			if mygoui.Button(c, "Revert changes").Disabled(!tab.Dirty()).Clicked() {
+			if mygoui.Button(c, "Revert changes").Padding(2, 8).FontSize(12).Disabled(!tab.Dirty()).Clicked() {
 				v.grid.revert(c, tab)
 			}
 		}

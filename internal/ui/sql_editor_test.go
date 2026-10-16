@@ -19,14 +19,30 @@ func TestCtrlNOpensNewSQLTab(t *testing.T) {
 	}
 }
 
-func TestPlusButtonOpensSQLTab(t *testing.T) {
+func TestNewSQLButtonOpensSQLTab(t *testing.T) {
 	sh, tt := newTestShell(t)
 	openTable(t, sh, tt, "users")
-	if err := tt.Click("New SQL tab"); err != nil {
+	if tt.HasText("New SQL tab") {
+		t.Error("the tab strip still has the + button")
+	}
+	if err := tt.Click("New SQL"); err != nil {
 		t.Fatal(err)
 	}
 	if tab := sh.st.Workspace.Active(); tab == nil || tab.Title != "Query 1" {
-		t.Errorf("active tab after + is %+v", tab)
+		t.Errorf("active tab after New SQL is %+v", tab)
+	}
+}
+
+func TestTableInspectorBarHasNoTableName(t *testing.T) {
+	e, _ := newTablesEnv(t)
+	openUsers(t, e)
+	if e.tt.HasText("public.users") {
+		t.Errorf("the bar under the tabs still shows the schema and table: %q", e.tt.Texts())
+	}
+	for _, want := range []string{"Data", "Properties", "Reload", "Refresh metadata", "New SQL"} {
+		if !e.tt.HasText(want) {
+			t.Errorf("missing %q: %q", want, e.tt.Texts())
+		}
 	}
 }
 

@@ -280,10 +280,7 @@ func (d *TableData) buildPage(req database.PageRequest, number int, res *databas
 // ---- operations on the State ----
 
 func tableTitle(t database.Table) string {
-	if t.Ref.Schema == "" || t.Ref.Schema == "public" {
-		return t.Ref.Name
-	}
-	return t.Ref.Schema + "." + t.Ref.Name
+	return t.Ref.Name
 }
 
 // OpenTable opens the Table Inspector of a table of a connection, or

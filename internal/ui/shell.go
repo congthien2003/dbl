@@ -26,6 +26,9 @@ type Shell struct {
 	explorer *explorer
 	views    map[app.TabID]*tabView
 	fader    themeFader
+	// tabGap is where the line under the tab strip is cut, under the tab
+	// chosen, as laid out in the last frame.
+	tabGap tabSpan
 
 	// The connection dialogs: at most one of form and nameDlg is open; pw
 	// is the password being typed in the prompt.

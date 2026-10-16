@@ -448,3 +448,16 @@ func TestBuildColumnsMarksPrimaryKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestTabTitleIsTheNameOfTheTableWithoutItsSchema(t *testing.T) {
+	e := newSQLEnv(t)
+	for _, schema := range []string{"public", "audit"} {
+		tab := e.s.OpenTable(e.connID, database.Table{Ref: database.TableRef{Catalog: "app", Schema: schema, Name: "log"}})
+		if tab.Title != "log" {
+			t.Errorf("title of %s.log is %q, want %q", schema, tab.Title, "log")
+		}
+	}
+	if n := len(e.s.Workspace.Tabs); n != 2 {
+		t.Errorf("%d tabs, want 2: tables of the same name in two schemas are two tabs", n)
+	}
+}

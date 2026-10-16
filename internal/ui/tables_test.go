@@ -358,3 +358,28 @@ func TestExplorerRowsWithIconsShowTheirLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestTabStripLineIsCutUnderTheChosenTab(t *testing.T) {
+	sh, tt := newTestShell(t)
+	users := openTable(t, sh, tt, "users")
+	orders := openTable(t, sh, tt, "orders")
+	tt.Frame()
+	tt.Frame()
+	gapOrders := sh.tabGap
+	if gapOrders.x1 <= gapOrders.x0 {
+		t.Fatalf("no gap under the chosen tab: %+v", gapOrders)
+	}
+	sh.st.Workspace.Select(users.ID)
+	tt.Frame()
+	tt.Frame()
+	gapUsers := sh.tabGap
+	if gapUsers.x1 <= gapUsers.x0 || gapUsers.x0 >= gapOrders.x0 {
+		t.Errorf("the gap did not move to the first tab: users %+v, orders %+v", gapUsers, gapOrders)
+	}
+	sh.st.Workspace.Select(orders.ID)
+	tt.Frame()
+	tt.Frame()
+	if sh.tabGap != gapOrders {
+		t.Errorf("the gap did not come back: %+v, want %+v", sh.tabGap, gapOrders)
+	}
+}
