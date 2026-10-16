@@ -8,7 +8,7 @@ import (
 )
 
 // sqlView is the view state of one SQL tab: its own text buffer and
-// editor. Phase 1 only edits; running queries and saving files come later.
+// editor. Phase 2.1 only edits; running queries and saving files come later.
 type sqlView struct {
 	state *editor.State
 }
@@ -23,13 +23,14 @@ func newSQLView() *sqlView {
 	}}
 }
 
-func (v *sqlView) build(c *mygoui.Context, t *mygoui.Theme, tab *app.Tab) {
-	conn := tab.Table.ConnectionID
-	if conn == "" {
-		conn = "none"
+func (v *sqlView) build(c *mygoui.Context, t *mygoui.Theme, sh *Shell, tab *app.Tab) {
+	label, color := "Connection: none", t.TextMuted
+	if p, ok := sh.st.Catalog.Profile(tab.Table.ConnectionID); ok {
+		label, color = sh.connectionStatus(t, p)
+		label = "Connection: " + label
 	}
 	mygoui.Row(c).Padding(6, 12).Gap(8).AlignItems(mygoui.Center).Children(func() {
-		mygoui.Text(c, "Connection: "+conn+" (mock)").TextColor(t.TextMuted)
+		mygoui.Text(c, label).TextColor(color).SingleLine()
 	})
 	mygoui.Divider(c)
 	editor.View(c, v.state).Grow(1).FillWidth().Label("SQL editor")

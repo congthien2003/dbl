@@ -16,46 +16,52 @@ func TestExplorerDoesNotAnimateAtStartup(t *testing.T) {
 }
 
 func TestExplorerFadesInNewlyOpenedChildren(t *testing.T) {
-	sh, tt := newTestShell(t)
-	tt.Frame()
-	sh.explorer.state.Open.Add("scratch") // under the open Personal folder
-	tt.Frame()
-	if !tt.FramePending() {
-		t.Fatal("opening an item did not start a fade")
+	e := newEnv(t)
+	personal := e.folderItem("Personal")
+	e.sh.explorer.state.Open.Remove(personal)
+	e.tt.Frame()
+	if e.tt.HasText("Scratch") {
+		t.Fatal("a closed folder still shows its connection")
 	}
-	if len(sh.explorer.born) == 0 {
+	e.sh.explorer.state.Open.Add(personal)
+	e.tt.Frame()
+	if !e.tt.FramePending() {
+		t.Fatal("opening a folder did not start a fade")
+	}
+	if len(e.sh.explorer.born) == 0 {
 		t.Error("no row was stamped as revealed")
 	}
-	tt.Advance(time.Second)
-	if tt.FramePending() {
+	e.tt.Advance(time.Second)
+	if e.tt.FramePending() {
 		t.Error("the explorer keeps asking for frames after the fade")
 	}
-	if len(sh.explorer.born) != 0 {
-		t.Errorf("%d fade records left after the fade", len(sh.explorer.born))
+	if len(e.sh.explorer.born) != 0 {
+		t.Errorf("%d fade records left after the fade", len(e.sh.explorer.born))
 	}
-	if !tt.HasText("public") {
+	if !e.tt.HasText("Scratch") {
 		t.Error("revealed rows are missing")
 	}
 }
 
 func TestExplorerClosingDoesNotAnimate(t *testing.T) {
-	sh, tt := newTestShell(t)
-	tt.Frame()
-	sh.explorer.state.Open.Remove("local-pg")
-	tt.Frame()
+	e := newEnv(t)
+	e.sh.explorer.state.Open.Remove(e.folderItem("Work"))
+	e.tt.Frame()
 	// The outline's own arrow turns, which may ask for frames; no row fades.
-	if len(sh.explorer.born) != 0 {
-		t.Errorf("closing an item stamped %d rows to fade in", len(sh.explorer.born))
+	if len(e.sh.explorer.born) != 0 {
+		t.Errorf("closing an item stamped %d rows to fade in", len(e.sh.explorer.born))
 	}
 }
 
 func TestExplorerRevealSkippedWhenMotionIsReduced(t *testing.T) {
-	sh, tt := newTestShell(t)
-	tt.SetPreferences(mygoui.Preferences{ReduceMotion: true})
-	tt.Frame()
-	sh.explorer.state.Open.Add("scratch")
-	tt.Frame()
-	if tt.FramePending() || len(sh.explorer.born) != 0 {
+	e := newEnv(t)
+	e.tt.SetPreferences(mygoui.Preferences{ReduceMotion: true})
+	personal := e.folderItem("Personal")
+	e.sh.explorer.state.Open.Remove(personal)
+	e.tt.Frame()
+	e.sh.explorer.state.Open.Add(personal)
+	e.tt.Frame()
+	if e.tt.FramePending() || len(e.sh.explorer.born) != 0 {
 		t.Error("rows faded in although motion is reduced")
 	}
 }

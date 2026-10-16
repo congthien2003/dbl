@@ -6,29 +6,26 @@ import (
 	"dbl/internal/storage"
 )
 
-func TestExplorerShowsMockTree(t *testing.T) {
+func TestExplorerShowsTheSavedTree(t *testing.T) {
 	_, tt := newTestShell(t)
-	for _, want := range []string{"SBDb", "Work", "Personal", "Sandbox", "Local PG", "Staging PG", "public", "users", "orders", "wide_events", "active_users"} {
+	for _, want := range []string{"SBDb", "Work", "Personal", "Sandbox", "Local PG", "Staging PG", "Scratch", "+ Connection", "+ Folder"} {
 		if !tt.HasText(want) {
 			t.Errorf("explorer does not show %q; texts: %q", want, tt.Texts())
 		}
 	}
+	for _, gone := range []string{"public", "users", "wide_events", "Mock data"} {
+		if tt.HasText(gone) {
+			t.Errorf("the explorer still shows mock content %q", gone)
+		}
+	}
 }
 
-func TestOpenTableFromExplorerCreatesTabAndRefocuses(t *testing.T) {
-	sh, tt := newTestShell(t)
-	ws := &sh.st.Workspace
-	doubleClickText(t, tt, "users")
-	if len(ws.Tabs) != 1 || ws.Active() == nil || ws.Active().Title != "users" {
-		t.Fatalf("after opening users: %d tabs, active %v", len(ws.Tabs), ws.Active())
-	}
-	doubleClickText(t, tt, "users")
-	if len(ws.Tabs) != 1 {
-		t.Errorf("opening users again made %d tabs, want 1", len(ws.Tabs))
-	}
-	doubleClickText(t, tt, "orders")
-	if len(ws.Tabs) != 2 || ws.Active().Title != "orders" {
-		t.Errorf("after opening orders: %d tabs, active %v", len(ws.Tabs), ws.Active())
+func TestEmptyExplorerInvitesToAddAConnection(t *testing.T) {
+	e := newEmptyEnv(t)
+	for _, want := range []string{"No connections yet", "+ Connection", "No connection selected"} {
+		if !e.tt.HasText(want) {
+			t.Errorf("empty explorer does not show %q; texts: %q", want, e.tt.Texts())
+		}
 	}
 }
 

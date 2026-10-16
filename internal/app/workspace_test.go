@@ -127,3 +127,34 @@ func TestSQLTabIsNeverDirty(t *testing.T) {
 		t.Error("SQL tab is dirty")
 	}
 }
+
+func TestTabsOfAndCloseConnection(t *testing.T) {
+	var w Workspace
+	a := open(t, &w, "local-pg", "users")
+	b := open(t, &w, "local-pg", "orders")
+	sql := w.NewSQL("local-pg")
+	other := open(t, &w, "staging-pg", "users")
+	free := w.NewSQL("")
+	makeDirty(b)
+
+	if got := w.TabsOf("local-pg"); len(got) != 3 || got[0] != a || got[2] != sql {
+		t.Fatalf("TabsOf = %d tabs", len(got))
+	}
+	if got := w.TabsOf("none"); len(got) != 0 {
+		t.Errorf("TabsOf(unknown) = %d", len(got))
+	}
+	w.Select(b.ID)
+	closed, dirty := w.CloseConnection("local-pg")
+	if closed != 3 || dirty != 1 {
+		t.Errorf("closed %d dirty %d, want 3 and 1", closed, dirty)
+	}
+	if len(w.Tabs) != 2 || w.Find(other.ID) == nil || w.Find(free.ID) == nil {
+		t.Errorf("%d tabs left", len(w.Tabs))
+	}
+	if w.Active() == nil {
+		t.Error("no tab is active although tabs remain")
+	}
+	if c, d := w.CloseConnection("local-pg"); c != 0 || d != 0 {
+		t.Errorf("second close: %d %d", c, d)
+	}
+}

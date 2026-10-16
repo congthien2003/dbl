@@ -125,6 +125,30 @@ func (w *Workspace) Close(id TabID) {
 	}
 }
 
+// TabsOf returns the tabs that belong to a connection.
+func (w *Workspace) TabsOf(connectionID string) []*Tab {
+	var out []*Tab
+	for _, t := range w.Tabs {
+		if t.Table.ConnectionID == connectionID {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// CloseConnection closes every tab of a connection without asking, and
+// reports how many it closed and how many of them held unsaved data.
+func (w *Workspace) CloseConnection(connectionID string) (closed, dirty int) {
+	for _, t := range w.TabsOf(connectionID) {
+		if t.Dirty() {
+			dirty++
+		}
+		w.Close(t.ID)
+		closed++
+	}
+	return closed, dirty
+}
+
 // Select makes a tab active; unknown IDs are ignored.
 func (w *Workspace) Select(id TabID) {
 	if w.indexOf(id) >= 0 {

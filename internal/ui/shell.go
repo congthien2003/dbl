@@ -7,7 +7,7 @@ import (
 	mygoui "github.com/egoist/mygo/ui"
 
 	"dbl/internal/app"
-	"dbl/internal/mock"
+	"dbl/internal/connection"
 	"dbl/internal/storage"
 )
 
@@ -26,6 +26,12 @@ type Shell struct {
 	explorer *explorer
 	views    map[app.TabID]*tabView
 	fader    themeFader
+
+	// The connection dialogs: at most one of form and nameDlg is open; pw
+	// is the password being typed in the prompt.
+	form    *connForm
+	nameDlg *nameDialog
+	pw      pwPrompt
 }
 
 // tabView is the view-only state of one tab. It lives as long as the tab.
@@ -80,7 +86,7 @@ func (sh *Shell) View(c *mygoui.Context) {
 		mygoui.Divider(c)
 		sh.statusBar(c, t)
 	})
-	sh.dialogs(c)
+	sh.dialogs(c, t)
 }
 
 // newSQL opens a SQL tab on the connection chosen in the explorer.
@@ -117,11 +123,56 @@ func (sh *Shell) body(c *mygoui.Context, t *mygoui.Theme, p Palette) {
 	}
 }
 
+// statusConnection is the connection the status bar describes: the one
+// chosen in the explorer, else the one of the active tab.
+func (sh *Shell) statusConnection() (connection.Profile, bool) {
+	if id := sh.explorer.selectedConnection(); id != "" {
+		if p, ok := sh.st.Catalog.Profile(id); ok {
+			return p, true
+		}
+	}
+	if tab := sh.st.Workspace.Active(); tab != nil {
+		return sh.st.Catalog.Profile(tab.Table.ConnectionID)
+	}
+	return connection.Profile{}, false
+}
+
+// connectionStatus describes the state of a connection in words, and the
+// color of the text.
+func (sh *Shell) connectionStatus(t *mygoui.Theme, p connection.Profile) (string, mygoui.Color) {
+	switch sh.st.Conns.Status(p.ID) {
+	case connection.Connected:
+		return "Connected: " + p.Name, t.Success
+	case connection.Connecting:
+		return "Connecting to " + p.Name + "…", t.TextMuted
+	case connection.Failed:
+		msg := "Connection to " + p.Name + " failed"
+		if err := sh.st.Conns.Err(p.ID); err != nil {
+			msg += ": " + err.Message
+			if err.Hint != "" {
+				msg += " " + err.Hint
+			}
+		}
+		return msg, t.Danger
+	case connection.NeedsPassword:
+		return "Password needed for " + p.Name, t.Warning
+	}
+	return p.Name + ": not connected", t.TextMuted
+}
+
 func (sh *Shell) statusBar(c *mygoui.Context, t *mygoui.Theme) {
 	mygoui.Row(c).Padding(4, 12).Gap(16).AlignItems(mygoui.Center).Children(func() {
-		mygoui.Text(c, "Mock data — no database connected").FontSize(12).TextColor(t.TextMuted)
+		if p, ok := sh.statusConnection(); ok {
+			text, color := sh.connectionStatus(t, p)
+			mygoui.Text(c, text).FontSize(12).TextColor(color).SingleLine()
+		} else {
+			mygoui.Text(c, "No connection selected").FontSize(12).TextColor(t.TextMuted)
+		}
+		if sh.st.TestNotice != "" {
+			mygoui.Text(c, sh.st.TestNotice).FontSize(12).TextColor(t.TextMuted).SingleLine()
+		}
 		if sh.st.Notice != "" {
-			mygoui.Text(c, sh.st.Notice).FontSize(12).TextColor(t.Warning)
+			mygoui.Text(c, sh.st.Notice).FontSize(12).TextColor(t.Warning).SingleLine()
 		}
 		mygoui.Box(c).Grow(1)
 		if tab := sh.st.Workspace.Active(); tab != nil && tab.Kind == app.TabTable {
@@ -130,8 +181,12 @@ func (sh *Shell) statusBar(c *mygoui.Context, t *mygoui.Theme) {
 	})
 }
 
-// dialogs shows the confirmation dialogs the state asks for.
-func (sh *Shell) dialogs(c *mygoui.Context) {
+// dialogs shows the dialogs the state asks for.
+func (sh *Shell) dialogs(c *mygoui.Context, t *mygoui.Theme) {
+	sh.connFormView(c, t)
+	sh.nameDialogView(c, t)
+	sh.connectionDialogs(c)
+	sh.passwordPromptView(c, t)
 	if sh.st.PendingClose != 0 {
 		open := true
 		switch mygoui.AlertDialog(c, &open, "Discard changes?",
@@ -175,9 +230,4 @@ func formatCount(n int) string {
 		b.WriteRune(r)
 	}
 	return b.String()
-}
-
-// datasetFor is a small seam for the explorer: tables of the fake catalog.
-func datasetFor(n *mock.Node) (*mock.Dataset, bool) {
-	return mock.DatasetFor(n.ConnectionID, n.Table)
 }

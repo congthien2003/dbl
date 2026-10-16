@@ -1,12 +1,32 @@
 package app
 
-import "dbl/internal/storage"
+import (
+	"dbl/internal/connection"
+	"dbl/internal/storage"
+)
 
 // State is the application state the UI reads and the actions change. All
-// methods run on the UI thread.
+// methods run on the UI thread. The zero value is usable: it has no
+// connections and nothing to connect with.
 type State struct {
 	Settings  storage.Settings
 	Workspace Workspace
+
+	// Catalog is the saved folders and connections; Conns opens and tracks
+	// their sessions (nil in tests that do not connect).
+	Catalog connection.Catalog
+	Conns   *connection.Manager
+	// ConnectionsReadOnly, when not empty, says why connections.json must
+	// not be written; every change to the catalog is refused meanwhile.
+	ConnectionsReadOnly string
+	// PendingConn is a connection change waiting for the user's answer.
+	// PendingFolderDelete is the folder the user is deleting, which holds
+	// connections that would move to the root.
+	PendingConn         *PendingConn
+	PendingFolderDelete string
+	// TestNotice is the outcome of the last "Test connection" from the
+	// explorer's menu, for the status bar.
+	TestNotice string
 
 	// Notice is a short message for the status bar, such as a settings
 	// file that could not be read.
@@ -18,9 +38,15 @@ type State struct {
 	PendingClose TabID
 	PendingQuit  bool
 
-	// Hooks set by main. Both may be nil.
-	SetThemeSource func(storage.ThemePref)
-	ScheduleSave   func(storage.Settings)
+	// Hooks set by main. All may be nil.
+	SetThemeSource      func(storage.ThemePref)
+	ScheduleSave        func(storage.Settings)
+	ScheduleCatalogSave func(connection.Catalog)
+
+	// catalogNotice is the Notice set by a failed catalog write, so a later
+	// successful write clears only that message.
+	catalogNotice string
+	cancelTest    func()
 }
 
 func (s *State) save() {

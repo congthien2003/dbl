@@ -1,5 +1,5 @@
 // Command dbl is SBDb, a desktop database manager built with MyGo's native
-// UI. Phase 1 shows the application shell on mock data.
+// UI. It keeps connection profiles and opens PostgreSQL sessions.
 package main
 
 import (
@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
 	mygoui "github.com/egoist/mygo/ui"
 
 	"dbl/internal/app"
+	"dbl/internal/connection"
+	"dbl/internal/database/postgres"
 	"dbl/internal/storage"
 	dblui "dbl/internal/ui"
 )
@@ -20,12 +23,22 @@ import (
 // processStart is when main's package initialized, for SBDB_TRACE_STARTUP.
 var processStart = time.Now()
 
-const settingsSaveDelay = 400 * time.Millisecond
+const (
+	settingsSaveDelay = 400 * time.Millisecond
+	// shutdownTimeout bounds how long quitting waits for sessions to close.
+	shutdownTimeout = 2 * time.Second
+)
 
 // discardWriter stands in for the settings file when its folder is unknown.
 type discardWriter struct{}
 
 func (discardWriter) Save(storage.Settings) error { return nil }
+
+// discardCatalog stands in for connections.json when its folder is unknown;
+// the state is read-only then, so nothing is ever scheduled.
+type discardCatalog struct{}
+
+func (discardCatalog) Save(connection.Catalog) error { return nil }
 
 // noticeFor turns a settings error into the status-bar message.
 func noticeFor(err error) string {
@@ -51,27 +64,111 @@ func loadState(store *storage.SettingsStore) *app.State {
 	return st
 }
 
+// addNotice adds a message to the status-bar notice.
+func addNotice(st *app.State, msg string) {
+	if st.Notice != "" {
+		st.Notice += " · "
+	}
+	st.Notice += msg
+}
+
+// connectionsNotice turns a connections.json problem into a status-bar
+// message.
+func connectionsNotice(err error, readOnly bool) string {
+	switch {
+	case errors.Is(err, storage.ErrConnectionsCorrupt) && readOnly:
+		return "Connections file was unreadable and could not be set aside; connections cannot be changed"
+	case errors.Is(err, storage.ErrConnectionsCorrupt):
+		return "Connections file was unreadable; starting with no connections (backup kept as connections.json.bad)"
+	case errors.Is(err, storage.ErrConnectionsVersion):
+		return "Connections were written by a newer version; they are not shown and cannot be changed"
+	case errors.Is(err, storage.ErrConnectionsUnreadable):
+		return "Connections file could not be read; connections cannot be changed (" + err.Error() + ")"
+	}
+	return "Connections could not be loaded: " + err.Error()
+}
+
+// loadConnections reads connections.json into the state. A problem never
+// stops the app. A file that cannot be understood makes the connections
+// read-only so it is never overwritten. It reads no credential and makes no
+// connection.
+func loadConnections(st *app.State, store *storage.ConnectionsStore) {
+	cat, warnings, err := store.Load()
+	st.Catalog = cat
+	reason, ro := store.ReadOnly()
+	if ro {
+		st.ConnectionsReadOnly = reason
+	}
+	if err != nil {
+		addNotice(st, connectionsNotice(err, ro))
+		log.Printf("connections: %v", err)
+	}
+	for _, w := range warnings {
+		log.Printf("connections: %s", w)
+	}
+	if len(warnings) > 0 {
+		addNotice(st, "Connections file was repaired; see the log")
+	}
+}
+
 func main() {
+	// DBL takes every connection setting from its profiles, never from the
+	// libpq environment; this must run before any other goroutine starts.
+	postgres.IgnoreLibpqEnvironment()
+
 	var (
-		st     *app.State
-		writer app.SettingsWriter = discardWriter{}
+		st        *app.State
+		writer    app.SettingsWriter             = discardWriter{}
+		catWriter app.Writer[connection.Catalog] = discardCatalog{}
 	)
 	if dir, err := storage.DefaultDir(); err != nil {
-		st = &app.State{Settings: storage.DefaultSettings(), Notice: "Home folder not found; settings will not be saved"}
+		st = &app.State{Settings: storage.DefaultSettings(), Notice: "Home folder not found; settings and connections will not be saved"}
+		st.ConnectionsReadOnly = "the home folder was not found"
 	} else {
 		store := storage.NewSettingsStore(dir)
 		st = loadState(store)
 		writer = store
+		connStore := storage.NewConnectionsStore(dir)
+		loadConnections(st, connStore)
+		catWriter = connStore
 	}
+
+	// win is set once the window exists; work finishing on other goroutines
+	// reaches the UI thread through it.
+	var win atomic.Pointer[mygo.Window]
+	post := func(fn func()) {
+		if w := win.Load(); w != nil {
+			w.Update(fn)
+		}
+	}
+
 	saver := app.NewSettingsSaver(writer, settingsSaveDelay, func(err error) { log.Printf("save settings: %v", err) })
+	catSaver := app.NewSaver(catWriter, 0, func(err error) {
+		log.Printf("save connections: %v", err)
+		post(func() { st.SetCatalogSaveError(err) })
+	})
+	catSaver.OnSaved = func() { post(st.ClearCatalogSaveError) }
+	conns := connection.NewManager(&st.Catalog, storage.SystemCredentials{}, postgres.Connect, post)
+	conns.OnCredentialIssue = st.ReportCredentialIssue
+	st.Conns = conns
+	st.ScheduleCatalogSave = catSaver.Schedule
 	st.SetThemeSource = func(p storage.ThemePref) { mygo.Theme.SetSource(dblui.ThemeSource(p)) }
 	st.ScheduleSave = saver.Schedule
 	mygo.Theme.SetSource(dblui.ThemeSource(st.Settings.Theme))
 
+	// shutdown ends every session and writes what is waiting. Which of the
+	// hooks below runs last when the window closes is not settled, so each
+	// calls it; it is safe to call again.
+	shutdown := func() {
+		conns.CloseAll(shutdownTimeout)
+		catSaver.Flush()
+		saver.Flush()
+	}
+
 	shell := dblui.NewShell(st)
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { saver.Flush() })
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { shutdown() })
 	mygo.App.WhenReady(func() {
-		win := mygo.NewWindow(mygo.WindowOptions{
+		w := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "SBDb",
 			Width:     st.Settings.Window.Width,
 			Height:    st.Settings.Window.Height,
@@ -80,22 +177,23 @@ func main() {
 			Content:   mygoui.View(shell.View),
 		})
 		shell.OnQuitConfirmed = func() {
-			saver.Flush()
-			win.Destroy()
+			shutdown()
+			w.Destroy()
 		}
-		win.OnResize(func() {
-			w, h := win.Size()
-			st.SetWindowSize(w, h)
+		w.OnResize(func() {
+			width, height := w.Size()
+			st.SetWindowSize(width, height)
 		})
-		win.OnClose(func(e *mygo.CloseEvent) {
+		w.OnClose(func(e *mygo.CloseEvent) {
 			if !st.RequestQuit() {
 				e.PreventDefault()
-				win.Invalidate()
+				w.Invalidate()
 			}
 		})
-		win.OnClosed(saver.Flush)
+		w.OnClosed(shutdown)
+		win.Store(w)
 		if os.Getenv("SBDB_TRACE_STARTUP") != "" {
-			win.OnReadyToShow(func() {
+			w.OnReadyToShow(func() {
 				fmt.Fprintf(os.Stderr, "startup: first frame ready %s after main started (Go runtime init not included)\n", time.Since(processStart))
 			})
 		}

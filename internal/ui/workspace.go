@@ -29,7 +29,7 @@ func (sh *Shell) workspace(c *mygoui.Context, t *mygoui.Theme, p Palette) {
 		v := sh.viewFor(tab)
 		mygoui.Column(c.Key(tab.ID)).Grow(1).Children(func() {
 			if tab.Kind == app.TabSQL {
-				v.sql.build(c, t, tab)
+				v.sql.build(c, t, sh, tab)
 				return
 			}
 			sh.tableTab(c, t, p, tab, v)
