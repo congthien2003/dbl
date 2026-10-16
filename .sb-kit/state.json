@@ -1,0 +1,689 @@
+{
+  "schemaVersion": 1,
+  "roots": {
+    ".agents": {
+      "sk-excute": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 14708,
+            "sha256": "0da9a06c73cd5a2f83e8d540d1e8357743a99f84c6abcca89e8048460579f2c2"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 384,
+            "sha256": "7c5710a8c54e3c93f3228b77bb674f30861acde8fafecc7425d762fe10dc3f7d"
+          },
+          {
+            "path": "evals/evals.json",
+            "size": 7940,
+            "sha256": "f47108fd4678ba2867e84691dc0292034f31070b85668318b5fd76edba2c6d6b"
+          }
+        ],
+        "directories": [
+          "agents",
+          "evals"
+        ],
+        "treeHash": "c3008960b9f554de626b7939cf3bb3149a55f71065f02d73dcb36821ee13b26e"
+      },
+      "sk-excute-explorer": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 2418,
+            "sha256": "06459acd6de0e90a8374ec26864e92b57cf40a65985973b8f1f2eb26b49d8fb0"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 326,
+            "sha256": "cb9e315ac58093b9cbbbee03d4142ffdcaea061d0b8cf28dc8a91fc0e846ee6c"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "4a93a062077bace3a152f6f73ac7e6b19feed0a70db688fb04500afc107d7938"
+      },
+      "sk-excute-researcher": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 2463,
+            "sha256": "b3980636854804b01691f634c2c136df5af779675007db5cbf6902fa99d88679"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 346,
+            "sha256": "b3c21e3d39b8f8922ef1729fababef7b8f30e3c898b2729032444d11fd52222f"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "f86448d8d4655f091e363beeaf385b0f62d7ed7a7397e002a7f5c8cede4e158b"
+      },
+      "sk-excute-reviewer": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 3133,
+            "sha256": "3b49f9e2badf9db18db180d3a9852be27c337516d8f903e26b8ac6ada61fd001"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 328,
+            "sha256": "06ff9fd37c46fc5b7b8bb8e39e76e07ceb369eeda381ab5cdce6c9dd8f9919d8"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "500111576e7febb130f44933c0e77ae8697e6a1af2b05abf8b61a53802cd2462"
+      },
+      "sk-excute-implementer": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 3380,
+            "sha256": "098acf5a9934ebaed47662854c2a511e6c08b96432a870f2d5cb064117614724"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 380,
+            "sha256": "8c1da72f076d90a3ca0d41c74305f3fdd866c007e6016ce9c720423763aad833"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "5553ffc4b542257057e485734fe6891aeea471c9b1bf9c95e23eddb693d10c49"
+      },
+      "sk-visualizer": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 7920,
+            "sha256": "1d27300161b4ecf317542cf39bdb58b573ca632ef66c0a35628c67bc7e95aa8f"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 230,
+            "sha256": "d335d305f3b2c6d690c636faa5037099ec0ccfcf0e8da8a3895217486a462f62"
+          },
+          {
+            "path": "index.html",
+            "size": 15285,
+            "sha256": "ef874c672ebdca943ed611b6cad4b311234bb68b92041649964cf2a56b628288"
+          },
+          {
+            "path": "references/implementation-plan.md",
+            "size": 2015,
+            "sha256": "b95f5d795da8d7c62047ba75df5cb31793499edd25c1722ecf4e87b1b38d6c3e"
+          },
+          {
+            "path": "references/spec-visualization.md",
+            "size": 1932,
+            "sha256": "3aff1c3b59e5e1989011e099163f67b510739331f6ebb9954ee3616bb166f030"
+          },
+          {
+            "path": "references/system-change-report.md",
+            "size": 2147,
+            "sha256": "2b553e3b98c79bf6b939898dad61e009ce82a33aadd092b4080234283359d62c"
+          }
+        ],
+        "directories": [
+          "agents",
+          "references"
+        ],
+        "treeHash": "6662877baed0a3551decf018a1a5dc86cb8b5e90ade800f1743d2939838c5433"
+      },
+      "sk-create-slide": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 11687,
+            "sha256": "d29cb98ef2d8eaae89094eba4cba17dab4bff7ba294ca1ba23b67a5da432370b"
+          },
+          {
+            "path": "STYLE_PRESETS.md",
+            "size": 10791,
+            "sha256": "ffa0c454c334275fb03de8533313caa499a06c2a1186678a5b82c349ce3677fc"
+          },
+          {
+            "path": "animation-patterns.md",
+            "size": 4355,
+            "sha256": "164757f07b2cdf8daba282f17f88e79d77848f51d0760222d1e9158edbe07451"
+          },
+          {
+            "path": "html-template.md",
+            "size": 12952,
+            "sha256": "ae0c7603f43e8e1506b96b0e7f4e92508e2a234f6c786a2e59ea3b071b64e71d"
+          },
+          {
+            "path": "scripts/export-pdf.sh",
+            "size": 12698,
+            "sha256": "b8d53bc1e6d01bd2a1eb2ed06580f9e48d5844956d56312b3782d8c11013d52d"
+          },
+          {
+            "path": "scripts/extract-pptx.py",
+            "size": 3013,
+            "sha256": "b70eac985562691bc8c109bdbfa42a8342db947fe3c3632ca638a072e11acc27"
+          },
+          {
+            "path": "viewport-base.css",
+            "size": 4218,
+            "sha256": "91109c8bd24f603933153f9916b4767f403ff5261e5bbe159c4442045b86f688"
+          }
+        ],
+        "directories": [
+          "scripts"
+        ],
+        "treeHash": "bdbbdbdd59e51857e55101f2fae2f472be43538447798c27bb376699221d3865"
+      },
+      "sk-doc": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 4002,
+            "sha256": "3e0291a646be92e4f4f70e2f4e5f9a1f8b9ad04f65fbe09452d6abd5b689f1a7"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 194,
+            "sha256": "b79a7e8075d288381db7b4f5e9066d53c955856c9c4378a81cd5b440bc6c6808"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "856dcffec487fc90b2cb84ed0787fb4c467823baf6d924d20ad3d9e2cfcd0b5c"
+      },
+      "sk-explain": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 5199,
+            "sha256": "d5e14abdf0bd0c66126b0c5b127c3f6ea916d558c977da3dec20412b389db390"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 228,
+            "sha256": "788ae3838d2c30139096c3b1e1600e652717f97581266eecab1ac1fb1596028f"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "9e3235e8cbeb643876ec93b963a0e938266f48895652fc40b89319ec0dd16d0d"
+      },
+      "sk-verify-code-ui-only": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 9255,
+            "sha256": "4762c06e220255d2af2948cb313107f75b1041af3f010b11fe93e008ef861367"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 272,
+            "sha256": "0023a1959beecaef89a64f628953aacd90bcae4975db8d8f6130414088350fc9"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "ce823826738681eb280e4db24a5e738a8cff136a4315f56a3e7ff53a32a0f79d"
+      },
+      "sk-review-diff": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 4394,
+            "sha256": "fa86c3ffabea703fcd30aad0f516c6e167dd544d79a5e5f3db128db8b7ac89e3"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 164,
+            "sha256": "445c32a7922557eec1d4cd23fdd09da3fbf5c9606d0761694e424c631c924620"
+          },
+          {
+            "path": "evals/evals.json",
+            "size": 2346,
+            "sha256": "78f6ab2b6b267bee08781b22b0449a64debe99862fb9cf2d40d973adf35e078c"
+          }
+        ],
+        "directories": [
+          "agents",
+          "evals"
+        ],
+        "treeHash": "4724720160ef0d975dde767f6a153e892ec53011df836c6e325ae153c0df332f"
+      },
+      "sk-debug": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 4314,
+            "sha256": "5055653447bcaecb7fdc4ff9a47b3999701da6079f785c9f2eb654d4d187188e"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 152,
+            "sha256": "ed2c3d518c32a344cef37164958e39a47831b5e012d44c6d232cd553a94a7149"
+          },
+          {
+            "path": "evals/evals.json",
+            "size": 2391,
+            "sha256": "f438f9d8d91f4dc73755184deb32ca9eed91749f0628548d056e23577f7f1900"
+          }
+        ],
+        "directories": [
+          "agents",
+          "evals"
+        ],
+        "treeHash": "b1c686b52ad51551df2806c3e97e24c2877af1e4095c26b69a4d3652ab72d087"
+      },
+      "deep-research": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 4958,
+            "sha256": "3ed152348e83e3f94979e6217ec21962859693e88fa59f94d97cdd584bc331b9"
+          }
+        ],
+        "directories": [],
+        "treeHash": "88195c83a346a6e0c155edb5852d8e85447931024b5df95db2d823695ec605f5"
+      },
+      "sk-landing-page": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 9806,
+            "sha256": "06aed85838347a2e887d2c166bab33f92f2b55e2350dee8e6dc3935779ab78fd"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 246,
+            "sha256": "85bdb5df35e1fc4bfb44bf47a5dc6be2e1bd89ca8fe81c8204aaea938cd86684"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "3ebbb08495d52ffee43484f54477fe20e17f5988f3269ac7573a89074351c6ec"
+      },
+      "frontend-design": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "LICENSE.txt",
+            "size": 10351,
+            "sha256": "eb3d7b5485466acbd81f2b496f595ab637d2792e268206b27d99e793bdb67549"
+          },
+          {
+            "path": "SKILL.md",
+            "size": 4482,
+            "sha256": "70044bbc8e4c21d23b8c8b864956aa1515c1c6cb2f9df14148dbb8c4af6187e5"
+          }
+        ],
+        "directories": [],
+        "treeHash": "33180acb7e477a66d5356b9a0a12457c4e0f4b19665d2209dda79f0a635d01ec"
+      }
+    },
+    ".claude": {
+      "sk-excute": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 14708,
+            "sha256": "0da9a06c73cd5a2f83e8d540d1e8357743a99f84c6abcca89e8048460579f2c2"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 384,
+            "sha256": "7c5710a8c54e3c93f3228b77bb674f30861acde8fafecc7425d762fe10dc3f7d"
+          },
+          {
+            "path": "evals/evals.json",
+            "size": 7940,
+            "sha256": "f47108fd4678ba2867e84691dc0292034f31070b85668318b5fd76edba2c6d6b"
+          }
+        ],
+        "directories": [
+          "agents",
+          "evals"
+        ],
+        "treeHash": "c3008960b9f554de626b7939cf3bb3149a55f71065f02d73dcb36821ee13b26e"
+      },
+      "sk-excute-explorer": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 2418,
+            "sha256": "06459acd6de0e90a8374ec26864e92b57cf40a65985973b8f1f2eb26b49d8fb0"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 326,
+            "sha256": "cb9e315ac58093b9cbbbee03d4142ffdcaea061d0b8cf28dc8a91fc0e846ee6c"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "4a93a062077bace3a152f6f73ac7e6b19feed0a70db688fb04500afc107d7938"
+      },
+      "sk-excute-researcher": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 2463,
+            "sha256": "b3980636854804b01691f634c2c136df5af779675007db5cbf6902fa99d88679"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 346,
+            "sha256": "b3c21e3d39b8f8922ef1729fababef7b8f30e3c898b2729032444d11fd52222f"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "f86448d8d4655f091e363beeaf385b0f62d7ed7a7397e002a7f5c8cede4e158b"
+      },
+      "sk-excute-reviewer": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 3133,
+            "sha256": "3b49f9e2badf9db18db180d3a9852be27c337516d8f903e26b8ac6ada61fd001"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 328,
+            "sha256": "06ff9fd37c46fc5b7b8bb8e39e76e07ceb369eeda381ab5cdce6c9dd8f9919d8"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "500111576e7febb130f44933c0e77ae8697e6a1af2b05abf8b61a53802cd2462"
+      },
+      "sk-excute-implementer": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 3380,
+            "sha256": "098acf5a9934ebaed47662854c2a511e6c08b96432a870f2d5cb064117614724"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 380,
+            "sha256": "8c1da72f076d90a3ca0d41c74305f3fdd866c007e6016ce9c720423763aad833"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "5553ffc4b542257057e485734fe6891aeea471c9b1bf9c95e23eddb693d10c49"
+      },
+      "sk-visualizer": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 7920,
+            "sha256": "1d27300161b4ecf317542cf39bdb58b573ca632ef66c0a35628c67bc7e95aa8f"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 230,
+            "sha256": "d335d305f3b2c6d690c636faa5037099ec0ccfcf0e8da8a3895217486a462f62"
+          },
+          {
+            "path": "index.html",
+            "size": 15285,
+            "sha256": "ef874c672ebdca943ed611b6cad4b311234bb68b92041649964cf2a56b628288"
+          },
+          {
+            "path": "references/implementation-plan.md",
+            "size": 2015,
+            "sha256": "b95f5d795da8d7c62047ba75df5cb31793499edd25c1722ecf4e87b1b38d6c3e"
+          },
+          {
+            "path": "references/spec-visualization.md",
+            "size": 1932,
+            "sha256": "3aff1c3b59e5e1989011e099163f67b510739331f6ebb9954ee3616bb166f030"
+          },
+          {
+            "path": "references/system-change-report.md",
+            "size": 2147,
+            "sha256": "2b553e3b98c79bf6b939898dad61e009ce82a33aadd092b4080234283359d62c"
+          }
+        ],
+        "directories": [
+          "agents",
+          "references"
+        ],
+        "treeHash": "6662877baed0a3551decf018a1a5dc86cb8b5e90ade800f1743d2939838c5433"
+      },
+      "sk-create-slide": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 11687,
+            "sha256": "d29cb98ef2d8eaae89094eba4cba17dab4bff7ba294ca1ba23b67a5da432370b"
+          },
+          {
+            "path": "STYLE_PRESETS.md",
+            "size": 10791,
+            "sha256": "ffa0c454c334275fb03de8533313caa499a06c2a1186678a5b82c349ce3677fc"
+          },
+          {
+            "path": "animation-patterns.md",
+            "size": 4355,
+            "sha256": "164757f07b2cdf8daba282f17f88e79d77848f51d0760222d1e9158edbe07451"
+          },
+          {
+            "path": "html-template.md",
+            "size": 12952,
+            "sha256": "ae0c7603f43e8e1506b96b0e7f4e92508e2a234f6c786a2e59ea3b071b64e71d"
+          },
+          {
+            "path": "scripts/export-pdf.sh",
+            "size": 12698,
+            "sha256": "b8d53bc1e6d01bd2a1eb2ed06580f9e48d5844956d56312b3782d8c11013d52d"
+          },
+          {
+            "path": "scripts/extract-pptx.py",
+            "size": 3013,
+            "sha256": "b70eac985562691bc8c109bdbfa42a8342db947fe3c3632ca638a072e11acc27"
+          },
+          {
+            "path": "viewport-base.css",
+            "size": 4218,
+            "sha256": "91109c8bd24f603933153f9916b4767f403ff5261e5bbe159c4442045b86f688"
+          }
+        ],
+        "directories": [
+          "scripts"
+        ],
+        "treeHash": "bdbbdbdd59e51857e55101f2fae2f472be43538447798c27bb376699221d3865"
+      },
+      "sk-doc": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 4002,
+            "sha256": "3e0291a646be92e4f4f70e2f4e5f9a1f8b9ad04f65fbe09452d6abd5b689f1a7"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 194,
+            "sha256": "b79a7e8075d288381db7b4f5e9066d53c955856c9c4378a81cd5b440bc6c6808"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "856dcffec487fc90b2cb84ed0787fb4c467823baf6d924d20ad3d9e2cfcd0b5c"
+      },
+      "sk-explain": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 5199,
+            "sha256": "d5e14abdf0bd0c66126b0c5b127c3f6ea916d558c977da3dec20412b389db390"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 228,
+            "sha256": "788ae3838d2c30139096c3b1e1600e652717f97581266eecab1ac1fb1596028f"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "9e3235e8cbeb643876ec93b963a0e938266f48895652fc40b89319ec0dd16d0d"
+      },
+      "sk-verify-code-ui-only": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 9255,
+            "sha256": "4762c06e220255d2af2948cb313107f75b1041af3f010b11fe93e008ef861367"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 272,
+            "sha256": "0023a1959beecaef89a64f628953aacd90bcae4975db8d8f6130414088350fc9"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "ce823826738681eb280e4db24a5e738a8cff136a4315f56a3e7ff53a32a0f79d"
+      },
+      "sk-review-diff": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 4394,
+            "sha256": "fa86c3ffabea703fcd30aad0f516c6e167dd544d79a5e5f3db128db8b7ac89e3"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 164,
+            "sha256": "445c32a7922557eec1d4cd23fdd09da3fbf5c9606d0761694e424c631c924620"
+          },
+          {
+            "path": "evals/evals.json",
+            "size": 2346,
+            "sha256": "78f6ab2b6b267bee08781b22b0449a64debe99862fb9cf2d40d973adf35e078c"
+          }
+        ],
+        "directories": [
+          "agents",
+          "evals"
+        ],
+        "treeHash": "4724720160ef0d975dde767f6a153e892ec53011df836c6e325ae153c0df332f"
+      },
+      "sk-debug": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 4314,
+            "sha256": "5055653447bcaecb7fdc4ff9a47b3999701da6079f785c9f2eb654d4d187188e"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 152,
+            "sha256": "ed2c3d518c32a344cef37164958e39a47831b5e012d44c6d232cd553a94a7149"
+          },
+          {
+            "path": "evals/evals.json",
+            "size": 2391,
+            "sha256": "f438f9d8d91f4dc73755184deb32ca9eed91749f0628548d056e23577f7f1900"
+          }
+        ],
+        "directories": [
+          "agents",
+          "evals"
+        ],
+        "treeHash": "b1c686b52ad51551df2806c3e97e24c2877af1e4095c26b69a4d3652ab72d087"
+      },
+      "deep-research": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 4958,
+            "sha256": "3ed152348e83e3f94979e6217ec21962859693e88fa59f94d97cdd584bc331b9"
+          }
+        ],
+        "directories": [],
+        "treeHash": "88195c83a346a6e0c155edb5852d8e85447931024b5df95db2d823695ec605f5"
+      },
+      "sk-landing-page": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "SKILL.md",
+            "size": 9806,
+            "sha256": "06aed85838347a2e887d2c166bab33f92f2b55e2350dee8e6dc3935779ab78fd"
+          },
+          {
+            "path": "agents/openai.yaml",
+            "size": 246,
+            "sha256": "85bdb5df35e1fc4bfb44bf47a5dc6be2e1bd89ca8fe81c8204aaea938cd86684"
+          }
+        ],
+        "directories": [
+          "agents"
+        ],
+        "treeHash": "3ebbb08495d52ffee43484f54477fe20e17f5988f3269ac7573a89074351c6ec"
+      },
+      "frontend-design": {
+        "packageVersion": "3.2.1",
+        "files": [
+          {
+            "path": "LICENSE.txt",
+            "size": 10351,
+            "sha256": "eb3d7b5485466acbd81f2b496f595ab637d2792e268206b27d99e793bdb67549"
+          },
+          {
+            "path": "SKILL.md",
+            "size": 4482,
+            "sha256": "70044bbc8e4c21d23b8c8b864956aa1515c1c6cb2f9df14148dbb8c4af6187e5"
+          }
+        ],
+        "directories": [],
+        "treeHash": "33180acb7e477a66d5356b9a0a12457c4e0f4b19665d2209dda79f0a635d01ec"
+      }
+    }
+  }
+}

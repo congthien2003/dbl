@@ -1,0 +1,68 @@
+{
+  "id": "b3c8d752-2a3a-44fc-92e0-bdc34b4da367",
+  "type": "install",
+  "status": "complete",
+  "completed": [
+    {
+      "root": ".claude",
+      "skill": "sk-excute"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-excute-explorer"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-excute-researcher"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-excute-reviewer"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-excute-implementer"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-visualizer"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-create-slide"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-doc"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-explain"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-verify-code-ui-only"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-review-diff"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-debug"
+    },
+    {
+      "root": ".claude",
+      "skill": "deep-research"
+    },
+    {
+      "root": ".claude",
+      "skill": "sk-landing-page"
+    },
+    {
+      "root": ".claude",
+      "skill": "frontend-design"
+    }
+  ],
+  "current": null
+}
