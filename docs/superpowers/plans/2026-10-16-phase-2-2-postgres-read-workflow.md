@@ -72,4 +72,14 @@ Completion gate (P0-C): mọi worker kết thúc bằng `State.Post(fn)`; `fn` c
 
 **Chưa chạy (`Not run`):** `integration_read_test.go` và toàn bộ SQL catalog/page với PostgreSQL thật — cần instance cô lập qua `DBL_TEST_PG_*` (test tự tạo schema `dbl_it_<random>` và xóa khi xong). Đây là rủi ro lớn nhất của phase: chuỗi SQL chỉ mới được kiểm bằng unit test về dạng text.
 
+**Bổ sung — icon cho explorer và cột khóa** (người dùng yêu cầu sau khi phase đã triển khai; chưa commit):
+
+- SVG nằm ở `resources/`, nhúng bằng `resources/embed.go` (`//go:embed *.svg`), parse một lần trong `internal/ui/icons.go`. Icon vẽ bằng `ui.Icon`, màu đặt lúc dùng (`TextColor`); không sửa file SVG (đã dùng `currentColor`).
+- Explorer: folder `folder.svg` (đóng) / `folder-minus.svg` (mở); connection (đại diện cho danh sách database) giữ chấm trạng thái ● và có `dropdown.svg` ngay sau chấm, cùng màu trạng thái; node database bên trong dùng `database-alt.svg`, schema dùng `folder-cog.svg`; table `table.svg`, view `grid-circle-diagonal-right.svg` (view vẫn in nghiêng). Folder/table/view không đặt màu riêng nên theo màu chữ của dòng (đọc được cả khi dòng đang chọn).
+- Màu chọn/hover của explorer (người dùng yêu cầu): dòng đang chọn dùng accent giảm 60% độ đậm (alpha 0.4 trên `Surface`) với chữ thường, hover là accent alpha 0.15. `explorerTheme` (`internal/ui/theme.go`) tạo theme này và `Shell.sidebar` chỉ áp dụng quanh `Outline`, trả theme gốc ngay sau nên nút/grid/tab không đổi.
+- Cột: chỉ cột PK có icon (`car-key.svg`, màu `Warning`); cột thường và FK không có. Hiện ở cột Name của Properties và ở header của grid. (Icon FK đã làm rồi bỏ theo yêu cầu người dùng.)
+- **[call] Header grid:** `ui.Table` chỉ nhận chuỗi `Title`, nên icon header được vẽ chồng bằng `Painter.Icon` tại mép trái cột (lấy từ cell của frame trước) và chỗ trống giữ bằng em space đầu `Title` (ID cột vẫn là tên cột nên sort không đổi). Hệ quả: bảng chưa có dòng nào thì header của cột PK có khoảng trống nhưng chưa có icon; chữ của header cột PK có em space đứng trước (ảnh hưởng test tìm theo text).
+- **[call]** Properties giữ chỗ cho icon ở mọi dòng khi bảng có cột PK để tên cột thẳng hàng. Icon có `Label`/`Tooltip` "Primary key column".
+- Đã chạy: `go vet ./...`, `go test ./...`, `CGO_ENABLED=0 go build ./...` đều qua. Chưa nhìn trên cửa sổ thật của MyGo (chỉ qua ảnh render của Tester).
+
 **Giới hạn đã biết:** chỉ First/Previous/Next (không nhảy trang, không COUNT); một ô text rất lớn vẫn được tải nguyên; PostgreSQL ≥ 12; chỉ liệt kê database của connection; schema `pg_*`/`information_schema` bị ẩn.

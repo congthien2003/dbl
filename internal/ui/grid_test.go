@@ -138,7 +138,9 @@ func TestWideTableBuildsAndScrolls(t *testing.T) {
 		t.Errorf("%d texts on screen for 200 columns, want fewer than 6000", n)
 	}
 	last := tab.Source.Columns()[len(tab.Source.Columns())-1].Name
-	first, ok := tt.Find("id")
+	// id is the primary key: its header keeps room for the key icon with an
+	// em space before the name.
+	first, ok := tt.Find(" id")
 	if !ok {
 		t.Fatal("first column header is not on screen")
 	}

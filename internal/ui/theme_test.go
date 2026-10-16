@@ -45,6 +45,30 @@ func TestPaletteDiffersBetweenThemes(t *testing.T) {
 	}
 }
 
+func TestExplorerThemeIsPalerAndLeavesTheOriginal(t *testing.T) {
+	for name, theme := range map[string]*mygoui.Theme{"light": mygoui.LightTheme(), "dark": mygoui.DarkTheme()} {
+		orig := *theme
+		et := explorerTheme(theme)
+		if *theme != orig {
+			t.Errorf("%s: the theme given was changed", name)
+		}
+		if et.Accent.A != 255 || et.SurfaceHover.A != 255 {
+			t.Errorf("%s: chosen or hover color is not opaque", name)
+		}
+		// Paler: nearer the surface than the accent is, by about 60%.
+		full, pale := distance(theme.Accent, theme.Surface), distance(et.Accent, theme.Surface)
+		if ratio := pale / full; ratio < 0.3 || ratio > 0.5 {
+			t.Errorf("%s: the chosen color is %.0f%% of the accent's distance from the surface, want about 40%%", name, ratio*100)
+		}
+		if distance(et.SurfaceHover, theme.Surface) >= pale {
+			t.Errorf("%s: hover is not paler than the chosen row", name)
+		}
+		if et.AccentText != theme.Text {
+			t.Errorf("%s: text on the chosen row is not the ordinary text", name)
+		}
+	}
+}
+
 func TestThemeSourceMapping(t *testing.T) {
 	tests := []struct {
 		in   storage.ThemePref

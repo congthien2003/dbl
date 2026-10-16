@@ -391,9 +391,15 @@ func (sh *Shell) sidebar(c *mygoui.Context, t *mygoui.Theme) {
 			})
 		} else {
 			e.state.List.Selected = &e.row
+			// The row chosen and the row under the pointer are paler here
+			// than elsewhere: the tree takes their colors from the theme
+			// it is made with, which is put back right after.
+			et := explorerTheme(t)
+			c.SetTheme(&et)
 			out := mygoui.Outline(c, &e.state, e.roots, e.childrenOf, func(id string) {
 				sh.explorerRow(c, t, id)
 			}).Grow(1).Label("Connections")
+			c.SetTheme(t)
 			e.endPass()
 			e.loadOpen(sh.st)
 			if out.Submitted() {
@@ -445,6 +451,11 @@ func (sh *Shell) explorerRow(c *mygoui.Context, t *mygoui.Theme, id string) {
 	switch n.kind {
 	case nodeFolder:
 		row.ContextMenu(func(m *mygoui.Menu) { sh.folderMenu(m, n) }).Children(func() {
+			svg := icons.Folder
+			if e.state.Open.Has(id) {
+				svg = icons.FolderOpen
+			}
+			mygoui.Icon(c, svg)
 			mygoui.Text(c, n.label).SingleLine()
 		})
 	case nodeConnection:
@@ -452,6 +463,7 @@ func (sh *Shell) explorerRow(c *mygoui.Context, t *mygoui.Theme, id string) {
 		glyph, color := statusGlyph(status, t)
 		row.ContextMenu(func(m *mygoui.Menu) { sh.connectionMenu(m, n) }).Children(func() {
 			mygoui.Text(c, glyph).TextColor(color).Label(status.String())
+			mygoui.Icon(c, icons.Connection).TextColor(color)
 			text := mygoui.Text(c, n.label).SingleLine()
 			if status == connection.Failed {
 				if err := sh.st.Conns.Err(id); err != nil {
@@ -472,8 +484,19 @@ func (sh *Shell) explorerRow(c *mygoui.Context, t *mygoui.Theme, id string) {
 		})
 	default:
 		row.ContextMenu(func(m *mygoui.Menu) { sh.objectMenu(m, id, n) }).Children(func() {
+			isView := n.kind == nodeTable && n.table.Kind == database.ObjectView
+			switch {
+			case n.kind == nodeDatabase:
+				mygoui.Icon(c, icons.Database)
+			case n.kind == nodeSchema:
+				mygoui.Icon(c, icons.Schema)
+			case isView:
+				mygoui.Icon(c, icons.View)
+			case n.kind == nodeTable:
+				mygoui.Icon(c, icons.Table)
+			}
 			text := mygoui.Text(c, n.label).SingleLine()
-			if n.kind == nodeTable && n.table.Kind == database.ObjectView {
+			if isView {
 				text.Italic()
 			}
 			if n.detail != "" {

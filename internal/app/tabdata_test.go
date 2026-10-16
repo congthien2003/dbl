@@ -437,3 +437,14 @@ func TestPrevPageWithNothingBeforeIsPageOne(t *testing.T) {
 		t.Errorf("rows start at %d", d.Page.Start(d.Size))
 	}
 }
+
+func TestBuildColumnsMarksPrimaryKeys(t *testing.T) {
+	m := fakedb.UsersTable("orders", 1).Meta
+	m.MarkKeys()
+	cols := buildColumns(m)
+	for i, want := range []bool{true, false, false, false} {
+		if cols[i].PrimaryKey != want {
+			t.Errorf("column %q: pk=%v, want %v", cols[i].Name, cols[i].PrimaryKey, want)
+		}
+	}
+}

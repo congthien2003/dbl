@@ -272,3 +272,89 @@ func TestHeaderClickSortsOnTheServer(t *testing.T) {
 		t.Errorf("clear: %+v %v", d.Sort, d.Plan.Strategy)
 	}
 }
+
+func countText(tt *mygoui.Tester, s string) int {
+	n := 0
+	for _, x := range tt.Texts() {
+		if x == s {
+			n++
+		}
+	}
+	return n
+}
+
+func TestKeyIconIsShownForPrimaryKeyColumns(t *testing.T) {
+	e, _ := newTablesEnv(t)
+	doubleClickText(t, e.tt, "public")
+	e.runPost()
+	doubleClickText(t, e.tt, "users")
+	e.runPost() // metadata
+	e.runPost() // first page
+	e.tt.Frame()
+	e.tt.Frame()
+
+	// The grid header keeps room for an icon only on the primary key column,
+	// and the icon is drawn at the left edges the cells reported.
+	g := gridOf(t, e.sh)
+	titles := map[string]string{}
+	for _, c := range g.cols {
+		titles[c.ID] = c.Title
+	}
+	for id, want := range map[string]string{"id": " id", "name": "name", "score": "score", "blob": "blob"} {
+		if titles[id] != want {
+			t.Errorf("header of %q is %q, want %q", id, titles[id], want)
+		}
+	}
+	if len(g.left) != len(g.cols) {
+		t.Errorf("left edges for %d of %d columns", len(g.left), len(g.cols))
+	}
+
+	if err := e.tt.Click("Properties"); err != nil {
+		t.Fatal(err)
+	}
+	e.tt.Frame()
+	if n := countText(e.tt, "Primary key column"); n != 1 {
+		t.Errorf("%d primary key icons in Properties, want 1: %q", n, e.tt.Texts())
+	}
+}
+
+func TestKeyIconIsShownOnceForTheIdColumn(t *testing.T) {
+	e, _ := newTablesEnv(t)
+	doubleClickText(t, e.tt, "public")
+	e.runPost()
+	doubleClickText(t, e.tt, "small")
+	e.runPost()
+	e.runPost()
+	if err := e.tt.Click("Properties"); err != nil {
+		t.Fatal(err)
+	}
+	e.tt.Frame()
+	if n := countText(e.tt, "Primary key column"); n != 1 {
+		t.Errorf("%d primary key icons, want 1 (the id column)", n)
+	}
+}
+
+func TestIconsLoad(t *testing.T) {
+	for name, svg := range map[string]*mygoui.SVG{
+		"folder": icons.Folder, "folder open": icons.FolderOpen, "connection": icons.Connection,
+		"database": icons.Database, "schema": icons.Schema,
+		"table": icons.Table, "view": icons.View, "primary key": icons.PrimaryKey,
+	} {
+		if svg == nil {
+			t.Errorf("icon %s did not load", name)
+		}
+	}
+}
+
+// The explorer rows carry icons now: every kind of node must still build
+// and show its label.
+func TestExplorerRowsWithIconsShowTheirLabels(t *testing.T) {
+	e, _ := newTablesEnv(t)
+	doubleClickText(t, e.tt, "public")
+	e.runPost()
+	for _, want := range []string{"Local PG", "app", "public", "users", "active_users"} {
+		if !e.tt.HasText(want) {
+			t.Errorf("missing %q: %q", want, e.tt.Texts())
+		}
+	}
+}

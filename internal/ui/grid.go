@@ -45,6 +45,9 @@ type gridView struct {
 	// at them over the whole table, header and empty room included.
 	edges []float32
 	next  map[int]float32
+	// left are the x positions of the left edges of the columns, taken the
+	// same way; the key icons of a header are drawn at them.
+	left, nextLeft map[int]float32
 	// lastBottom is the bottom of the lowest cell painted in the last frame,
 	// where the lines between columns carry on below the rows.
 	lastBottom, paintBottom float32
@@ -60,15 +63,44 @@ func (g *gridView) columns(src grid.Source) []mygoui.TableColumn {
 	sig := ""
 	for _, col := range cols {
 		sig += col.Name + ""
+		if col.PrimaryKey {
+			sig += "p"
+		}
 	}
 	if g.cols == nil || g.colSig != sig {
 		g.colSig = sig
 		g.cols = make([]mygoui.TableColumn, len(cols))
 		for i, col := range cols {
-			g.cols[i] = mygoui.TableColumn{Title: col.Name, ID: col.Name, Width: col.Width, MinWidth: 60, Sortable: col.Sortable}
+			// A header holds text only: the key icon is drawn over it (see
+			// drawKeyIcons) in room kept by an em space.
+			title := ""
+			if col.PrimaryKey {
+				title = " "
+			}
+			g.cols[i] = mygoui.TableColumn{Title: title + col.Name, ID: col.Name, Width: col.Width, MinWidth: 60, Sortable: col.Sortable}
 		}
 	}
 	return g.cols
+}
+
+// drawKeyIcons draws the key icon of the headers of the primary key columns,
+// in the room their titles keep. A column whose cells were not seen yet (no rows) has no icon.
+func (g *gridView) drawKeyIcons(pt *mygoui.Painter, r mygoui.Rect, th *mygoui.Theme, cols []grid.Column) {
+	em := th.FontSize
+	size := em * 0.9
+	headH := th.Space(8)
+	k := primaryKeyIcon(th)
+	for i, col := range cols {
+		left, ok := g.left[i]
+		if !ok || !col.PrimaryKey {
+			continue
+		}
+		x := left + th.Space(2.5)
+		if x < r.X {
+			continue // scrolled under the edge of the table
+		}
+		pt.Icon(k.svg, mygoui.Rect{X: x, Y: r.Y + (headH-size)/2, W: size, H: size}, k.color)
+	}
 }
 
 // value returns what a cell shows and whether it holds an unsaved edit.
@@ -89,6 +121,7 @@ func (g *gridView) updateEdges(c *mygoui.Context) {
 		edges = append(edges, x)
 	}
 	slices.Sort(edges)
+	g.left = g.nextLeft
 	if !slices.Equal(edges, g.edges) {
 		g.edges = edges
 		c.Invalidate()
@@ -126,7 +159,7 @@ func (g *gridView) build(c *mygoui.Context, st *app.State, tab *app.Tab, p Palet
 	}
 	g.sort = applied
 	g.list.Sort = &g.sort
-	g.next = map[int]float32{}
+	g.next, g.nextLeft = map[int]float32{}, map[int]float32{}
 	tbl := mygoui.Table(c, &g.list, g.columns(src), src.Len(), func(row, col int) {
 		g.buildCell(c, tab, p, row, col)
 	}).Grow(1).Label("Grid")
@@ -156,6 +189,7 @@ func (g *gridView) build(c *mygoui.Context, st *app.State, tab *app.Tab, p Palet
 		for _, x := range g.edges {
 			pt.Fill(mygoui.Rect{X: x - 1, Y: r.Y, W: 1, H: headH}, p.GridLine, 0)
 		}
+		g.drawKeyIcons(pt, r, th, src.Columns())
 	})
 	g.updateEdges(c)
 	if d != nil && g.sort != applied {
@@ -199,6 +233,7 @@ func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, co
 	padX, padY := t.Space(2.5), t.Space(1.5)
 	if r := box.LayoutBounds(); r.W > 0 {
 		g.next[col] = r.X + r.W + padX
+		g.nextLeft[col] = r.X - padX
 	}
 	// A faint line below and to the right of the cell, over its whole
 	// padded area so neighbours join into rules.

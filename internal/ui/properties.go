@@ -113,6 +113,10 @@ func propColumns(c *mygoui.Context, t *mygoui.Theme, m *database.TableMetadata) 
 	mygoui.Column(c).Gap(4).Children(func() {
 		mygoui.Text(c, fmt.Sprintf("Columns (%d)", len(m.Columns))).Bold()
 		rows := make([][]string, len(m.Columns))
+		hasPK := false // names line up after the key icon when there is one
+		for _, col := range m.Columns {
+			hasPK = hasPK || col.PrimaryKey
+		}
 		for i, col := range m.Columns {
 			def := ""
 			if col.Default != nil {
@@ -127,8 +131,26 @@ func propColumns(c *mygoui.Context, t *mygoui.Theme, m *database.TableMetadata) 
 				yesNo(col.Nullable), def, yesNo(col.PrimaryKey), yesNo(col.Unique), ident,
 			}
 		}
-		propTable(c, t, []float32{40, 200, 110, 200, 70, 240, 50, 70, 100},
-			[]string{"#", "Name", "Type", "Native type", "Nullable", "Default", "PK", "Unique", "Identity"}, rows)
+		widths := []float32{40, 200, 110, 200, 70, 240, 50, 70, 100}
+		propTableWith(c, t, widths,
+			[]string{"#", "Name", "Type", "Native type", "Nullable", "Default", "PK", "Unique", "Identity"}, rows,
+			func(row, col int) bool {
+				if col != 1 || !hasPK {
+					return false
+				}
+				name := m.Columns[row].Name
+				mygoui.Row(c).Width(widths[col]).Gap(4).AlignItems(mygoui.Center).Children(func() {
+					size := t.FontSize + 2
+					mygoui.Row(c).Width(size).Children(func() {
+						if m.Columns[row].PrimaryKey {
+							k := primaryKeyIcon(t)
+							mygoui.Icon(c, k.svg).TextColor(k.color).Label(k.label).Tooltip(k.label)
+						}
+					})
+					mygoui.Text(c, name).SingleLine().Grow(1).Tooltip(name)
+				})
+				return true
+			})
 	})
 }
 
@@ -160,9 +182,18 @@ func propSection(c *mygoui.Context, t *mygoui.Theme, title string, state databas
 
 // propTable draws rows of text under a header, in columns of fixed width.
 func propTable(c *mygoui.Context, t *mygoui.Theme, widths []float32, header []string, rows [][]string) {
-	line := func(cells []string, bold bool) {
+	propTableWith(c, t, widths, header, rows, nil)
+}
+
+// propTableWith is propTable where cell, when it is not nil, may draw the
+// cell of a row itself (and say so by returning true).
+func propTableWith(c *mygoui.Context, t *mygoui.Theme, widths []float32, header []string, rows [][]string, cell func(row, col int) bool) {
+	line := func(ri int, cells []string, bold bool) {
 		mygoui.Row(c).Gap(8).Children(func() {
 			for i, s := range cells {
+				if !bold && cell != nil && cell(ri, i) {
+					continue
+				}
 				txt := mygoui.Text(c, s).SingleLine().Width(widths[i]).Tooltip(s)
 				if bold {
 					txt.Bold().TextColor(t.TextMuted)
@@ -171,10 +202,10 @@ func propTable(c *mygoui.Context, t *mygoui.Theme, widths []float32, header []st
 		})
 	}
 	mygoui.Column(c).Gap(2).Children(func() {
-		line(header, true)
+		line(-1, header, true)
 		mygoui.Divider(c)
-		for _, r := range rows {
-			line(r, false)
+		for ri, r := range rows {
+			line(ri, r, false)
 		}
 	})
 }

@@ -33,6 +33,18 @@ func NewPalette(t *mygoui.Theme) Palette {
 	}
 }
 
+// explorerTheme is t with the colors of the explorer's chosen row and hovered
+// row paler: the accent at 40% (60% less) over the surface for the chosen
+// row, with the ordinary text on it, and the accent at 15% for the row under
+// the pointer.
+func explorerTheme(t *mygoui.Theme) mygoui.Theme {
+	et := *t
+	et.Accent = t.Accent.Alpha(0.40).Over(t.Surface)
+	et.AccentText = t.Text
+	et.SurfaceHover = t.Accent.Alpha(0.15).Over(t.Surface)
+	return et
+}
+
 // ThemeSource maps the saved preference to MyGo's theme source. Unknown
 // values follow the system.
 func ThemeSource(p storage.ThemePref) mygo.ThemeSource {
