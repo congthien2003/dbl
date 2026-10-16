@@ -57,6 +57,10 @@ type gridView struct {
 	// lastBottom is the bottom of the lowest cell painted in the last frame,
 	// where the lines between columns carry on below the rows.
 	lastBottom, paintBottom float32
+	// base is the theme of the window. The table is made with a paler
+	// accent (gridTheme), which its rows and cells are built with; what
+	// needs the full accent takes it from base.
+	base *mygoui.Theme
 }
 
 func newGridView() *gridView { return &gridView{row: -1, cell: noCell} }
@@ -166,9 +170,16 @@ func (g *gridView) build(c *mygoui.Context, st *app.State, tab *app.Tab, p Palet
 	g.sort = applied
 	g.list.Sort = &g.sort
 	g.next, g.nextLeft = map[int]float32{}, map[int]float32{}
+	// The row chosen is paler here than MyGo's full accent: the rows are
+	// built with the theme the table is made with, which is put back right
+	// after.
+	g.base = c.Theme()
+	gt := gridTheme(g.base)
+	c.SetTheme(&gt)
 	tbl := mygoui.Table(c, &g.list, g.columns(src), src.Len(), func(row, col int) {
 		g.buildCell(c, tab, p, row, col)
 	}).Grow(1).Label("Grid")
+	c.SetTheme(g.base)
 	// The lines of the rows are drawn by the cells themselves, so they move
 	// with the rows. The lines between columns continue where there are no
 	// cells: under the last row, drawn below the table's children so the
@@ -260,7 +271,7 @@ func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, co
 		box.Background(p.ActiveCell)
 	}
 	if g.cell == pos {
-		box.Border(1, t.Accent)
+		box.Border(1, g.base.Accent)
 	}
 	box.Children(func() {
 		text := mygoui.Text(c, v.Display(maxCellRunes)).SingleLine()
@@ -301,6 +312,9 @@ func (g *gridView) startEdit(c *mygoui.Context, tab *app.Tab, pos cellPos) {
 
 func (g *gridView) buildEditor(c *mygoui.Context, tab *app.Tab) {
 	e := g.edit
+	// The editor takes the full accent (focus ring, selection), not the
+	// paler one of the rows.
+	c.SetTheme(g.base)
 	in := mygoui.TextInput(c.Key("cell-edit"), &e.text).AutoFocus().Grow(1).Label("Cell editor")
 	switch {
 	case in.Submitted():

@@ -69,6 +69,26 @@ func TestExplorerThemeIsPalerAndLeavesTheOriginal(t *testing.T) {
 	}
 }
 
+func TestGridThemeIsPalerAndLeavesTheOriginal(t *testing.T) {
+	for name, theme := range map[string]*mygoui.Theme{"light": mygoui.LightTheme(), "dark": mygoui.DarkTheme()} {
+		orig := *theme
+		gt := gridTheme(theme)
+		if *theme != orig {
+			t.Errorf("%s: the theme given was changed", name)
+		}
+		if gt.Accent.A != 255 {
+			t.Errorf("%s: chosen row color is not opaque", name)
+		}
+		full, pale := distance(theme.Accent, theme.Background), distance(gt.Accent, theme.Background)
+		if ratio := pale / full; ratio < 0.1 || ratio > 0.3 {
+			t.Errorf("%s: the chosen row is %.0f%% of the accent's distance from the background, want about 18%%", name, ratio*100)
+		}
+		if gt.AccentText != theme.Text {
+			t.Errorf("%s: text on the chosen row is not the ordinary text", name)
+		}
+	}
+}
+
 func TestThemeSourceMapping(t *testing.T) {
 	tests := []struct {
 		in   storage.ThemePref

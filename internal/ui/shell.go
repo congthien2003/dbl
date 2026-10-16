@@ -121,11 +121,11 @@ func (sh *Shell) topBar(c *mygoui.Context, t *mygoui.Theme) {
 				name string
 				svg  *mygoui.SVG
 			}{{"System", icons.ThemeSystem}, {"Light", icons.ThemeLight}, {"Dark", icons.ThemeDark}} {
-				item := seg.Segment(i).Padding(3, 6).Radius(4).AlignItems(mygoui.Center).Label(s.name).Tooltip(s.name)
+				item := sh.fade(seg.Segment(i)).Padding(4, 8).Radius(5).AlignItems(mygoui.Center).Label(s.name).Tooltip(s.name)
 				if i == idx {
 					item.Background(t.Background)
 				}
-				item.Children(func() { mygoui.Icon(c, s.svg).FontSize(12) })
+				item.Children(func() { mygoui.Icon(c, s.svg).FontSize(16) })
 			}
 		})
 		if idx != shown {
@@ -187,7 +187,7 @@ func (sh *Shell) statusBar(c *mygoui.Context, t *mygoui.Theme) {
 	mygoui.Row(c).Padding(4, 12).Gap(16).AlignItems(mygoui.Center).Children(func() {
 		if p, ok := sh.statusConnection(); ok {
 			text, color := sh.connectionStatus(t, p)
-			mygoui.Text(c, text).FontSize(12).TextColor(color).SingleLine()
+			mygoui.Text(c, text).FontSize(12).TextColor(color).SingleLine().ContentTransition(statusFade)
 		} else {
 			mygoui.Text(c, "No connection selected").FontSize(12).TextColor(t.TextMuted)
 		}

@@ -16,12 +16,14 @@ const themeFadeDuration = 220 * time.Millisecond
 // frame's theme, so backgrounds, borders and text all change together.
 type themeFader struct {
 	started        bool
+	fading         bool // the frame being built shows a mix of two themes
 	from, to, show mygoui.Theme
 	start          time.Time
 }
 
 // apply must run first in the view, before anything reads c.Theme().
 func (f *themeFader) apply(c *mygoui.Context) {
+	f.fading = false
 	target := *c.Theme()
 	now := c.Now()
 	if !f.started {
@@ -31,6 +33,9 @@ func (f *themeFader) apply(c *mygoui.Context) {
 	}
 	if target != f.to {
 		f.from, f.to, f.start = f.show, target, now
+		// Even when the theme changes at once, the colors of this frame
+		// are not a hover: they must not fade.
+		f.fading = true
 		if c.Preferences().ReduceMotion {
 			f.from = target
 		}
@@ -42,6 +47,7 @@ func (f *themeFader) apply(c *mygoui.Context) {
 	}
 	f.show = lerpTheme(f.from, f.to, smoothstep(p))
 	c.SetTheme(&f.show)
+	f.fading = true
 	c.AnimationFrame()
 }
 

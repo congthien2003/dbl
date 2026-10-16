@@ -62,10 +62,10 @@ func (sh *Shell) nameDialogView(c *mygoui.Context, t *mygoui.Theme) {
 				}
 			}).Error(d.err)
 			mygoui.Row(c).Gap(8).Justify(mygoui.End).Children(func() {
-				if mygoui.Button(c, "Cancel").Clicked() {
+				if sh.fade(mygoui.Button(c, "Cancel")).Clicked() {
 					open = false
 				}
-				if mygoui.PrimaryButton(c, ok).Clicked() {
+				if sh.fade(mygoui.PrimaryButton(c, ok)).Clicked() {
 					submit = true
 				}
 			})
@@ -143,10 +143,10 @@ func (sh *Shell) passwordPromptView(c *mygoui.Context, t *mygoui.Theme) {
 				}
 			})
 			mygoui.Row(c).Gap(8).Justify(mygoui.End).Children(func() {
-				if mygoui.Button(c, "Cancel").Clicked() {
+				if sh.fade(mygoui.Button(c, "Cancel")).Clicked() {
 					open = false
 				}
-				if mygoui.PrimaryButton(c, "Connect").Clicked() {
+				if sh.fade(mygoui.PrimaryButton(c, "Connect")).Clicked() {
 					submit = true
 				}
 			})

@@ -61,7 +61,7 @@ func (sh *Shell) tabStrip(c *mygoui.Context, t *mygoui.Theme, p Palette) {
 			tabs := mygoui.TabsBase(c, &idx, len(ws.Tabs))
 			tabs.List.Gap(2).Children(func() {
 				for i, tab := range ws.Tabs {
-					item := tabs.Tab(i).Padding(4, 6, 4, 10).Gap(6).AlignItems(mygoui.Center).
+					item := sh.fade(tabs.Tab(i)).Padding(4, 6, 4, 10).Gap(6).AlignItems(mygoui.Center).
 						Radius(6, 6, 0, 0).BorderWidth(1, 1, 0, 1).BorderColor(t.Border)
 					switch {
 					case i == idx:
@@ -93,7 +93,7 @@ func (sh *Shell) tabStrip(c *mygoui.Context, t *mygoui.Theme, p Palette) {
 						}
 						// A ghost button of an icon: no face until the pointer is over
 						// it, then a pale red.
-						closeBtn := mygoui.ButtonBase(c).Label("Close " + tab.Title).Padding(3).Radius(4).
+						closeBtn := sh.fade(mygoui.ButtonBase(c)).Label("Close " + tab.Title).Padding(3).Radius(4).
 							AlignItems(mygoui.Center).Justify(mygoui.Center)
 						color := t.TextMuted
 						if closeBtn.Hovered() {

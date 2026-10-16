@@ -71,7 +71,8 @@ func (fb *filterBar) desired(m *database.TableMetadata) *database.Filter {
 }
 
 // build draws the bar and sends the filter to the state when it should.
-func (fb *filterBar) build(c *mygoui.Context, t *mygoui.Theme, st *app.State, tab *app.Tab) {
+func (fb *filterBar) build(c *mygoui.Context, t *mygoui.Theme, sh *Shell, tab *app.Tab) {
+	st := sh.st
 	d := tab.Data
 	m := d.Meta
 	names := make([]string, len(m.Columns))
@@ -96,7 +97,7 @@ func (fb *filterBar) build(c *mygoui.Context, t *mygoui.Theme, st *app.State, ta
 		if needsValue {
 			mygoui.TextInput(c, &fb.text).Placeholder("Value").Label("Filter value").Width(240)
 		}
-		if mygoui.Button(c, "Clear").Disabled(fb.text == "" && d.Filter == nil).Clicked() {
+		if sh.fade(mygoui.Button(c, "Clear")).Disabled(fb.text == "" && d.Filter == nil).Clicked() {
 			fb.text = ""
 			fb.op = opLabels(class)[0]
 		}

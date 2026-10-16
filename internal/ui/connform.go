@@ -322,17 +322,17 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 			}
 			mygoui.Row(c).Gap(8).AlignItems(mygoui.Center).Children(func() {
 				if f.testing {
-					if mygoui.Button(c, "Cancel test").Clicked() {
+					if sh.fade(mygoui.Button(c, "Cancel test")).Clicked() {
 						cancelTest = true
 					}
-				} else if mygoui.Button(c, "Test connection").Clicked() {
+				} else if sh.fade(mygoui.Button(c, "Test connection")).Clicked() {
 					test = true
 				}
 				mygoui.Box(c).Grow(1)
-				if mygoui.Button(c, "Cancel").Clicked() {
+				if sh.fade(mygoui.Button(c, "Cancel")).Clicked() {
 					open = false
 				}
-				if mygoui.PrimaryButton(c, "Save").Clicked() {
+				if sh.fade(mygoui.PrimaryButton(c, "Save")).Clicked() {
 					save = true
 				}
 			})

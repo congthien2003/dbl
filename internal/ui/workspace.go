@@ -48,7 +48,7 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 				name string
 				svg  *mygoui.SVG
 			}{{"Data", icons.Table}, {"Properties", icons.Properties}} {
-				item := seg.Segment(i).Padding(2, 8).Radius(4).Gap(4).AlignItems(mygoui.Center).Label(s.name)
+				item := sh.fade(seg.Segment(i)).Padding(2, 8).Radius(4).Gap(4).AlignItems(mygoui.Center).Label(s.name)
 				if i == v.section {
 					item.Background(t.Background)
 				}
@@ -63,16 +63,16 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 			mygoui.Spinner(c).Label("Loading")
 			mygoui.Text(c, "Loading…").FontSize(12).TextColor(t.TextMuted)
 		}
-		if mygoui.Button(c, "New SQL").Padding(2, 8).FontSize(12).Clicked() {
+		if sh.fade(mygoui.Button(c, "New SQL")).Padding(2, 8).FontSize(12).Clicked() {
 			sh.newSQL()
 			c.Invalidate()
 		}
 		if d != nil {
-			if mygoui.Button(c, "Reload").Label("Reload data").Padding(2, 8).FontSize(12).Disabled(d.MetaState == app.OpLoading).Clicked() {
+			if sh.fade(mygoui.Button(c, "Reload")).Label("Reload data").Padding(2, 8).FontSize(12).Disabled(d.MetaState == app.OpLoading).Clicked() {
 				sh.st.ReloadTable(tab)
 				c.Invalidate()
 			}
-			if mygoui.Button(c, "Refresh metadata").Padding(2, 8).FontSize(12).Disabled(d.MetaState == app.OpLoading).Clicked() {
+			if sh.fade(mygoui.Button(c, "Refresh metadata")).Padding(2, 8).FontSize(12).Disabled(d.MetaState == app.OpLoading).Clicked() {
 				sh.st.RefreshMetadata(tab)
 				c.Invalidate()
 			}
@@ -84,7 +84,7 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 			mygoui.Text(c, fmt.Sprintf("%d unsaved edit(s)", n)).FontSize(12).TextColor(t.Warning)
 		}
 		if tab.Data == nil {
-			if mygoui.Button(c, "Revert changes").Padding(2, 8).FontSize(12).Disabled(!tab.Dirty()).Clicked() {
+			if sh.fade(mygoui.Button(c, "Revert changes")).Padding(2, 8).FontSize(12).Disabled(!tab.Dirty()).Clicked() {
 				v.grid.revert(c, tab)
 			}
 		}
@@ -110,7 +110,7 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 	case d.Meta == nil:
 		centered(c, func() {
 			errorBanner(c, t, d.MetaErr, "The table could not be read.")
-			if mygoui.Button(c, "Retry").Clicked() {
+			if sh.fade(mygoui.Button(c, "Retry")).Clicked() {
 				sh.st.ReloadTable(tab)
 				c.Invalidate()
 			}
@@ -129,7 +129,7 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 	if v.filter == nil {
 		v.filter = newFilterBar()
 	}
-	v.filter.build(c, t, sh.st, tab)
+	v.filter.build(c, t, sh, tab)
 	if d.Plan.Warning != "" {
 		mygoui.Row(c).Padding(2, 12).Children(func() {
 			mygoui.Text(c, "⚠ "+d.Plan.Warning).FontSize(12).TextColor(t.Warning)
@@ -141,7 +141,7 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 			if d.Page != nil {
 				mygoui.Text(c, "Showing the previous rows.").FontSize(12).TextColor(t.TextMuted)
 			}
-			if mygoui.Button(c, "Retry").Clicked() {
+			if sh.fade(mygoui.Button(c, "Retry")).Clicked() {
 				sh.st.ReloadTable(tab)
 				c.Invalidate()
 			}
@@ -194,15 +194,15 @@ func (sh *Shell) pagingBar(c *mygoui.Context, t *mygoui.Theme, tab *app.Tab) {
 	mygoui.Divider(c)
 	mygoui.Row(c).Padding(4, 12).Gap(8).AlignItems(mygoui.Center).Children(func() {
 		hasPrev, hasNext := d.Page != nil && d.Page.HasPrev, d.Page != nil && d.Page.HasNext
-		if mygoui.Button(c, "First").Disabled(!hasPrev || busy).Clicked() {
+		if sh.fade(mygoui.Button(c, "First")).Disabled(!hasPrev || busy).Clicked() {
 			sh.st.FirstPage(tab)
 			c.Invalidate()
 		}
-		if mygoui.Button(c, "Previous").Disabled(!hasPrev || busy).Clicked() {
+		if sh.fade(mygoui.Button(c, "Previous")).Disabled(!hasPrev || busy).Clicked() {
 			sh.st.PrevPage(tab)
 			c.Invalidate()
 		}
-		if mygoui.Button(c, "Next").Disabled(!hasNext || busy).Clicked() {
+		if sh.fade(mygoui.Button(c, "Next")).Disabled(!hasNext || busy).Clicked() {
 			sh.st.NextPage(tab)
 			c.Invalidate()
 		}
@@ -219,7 +219,7 @@ func (sh *Shell) pagingBar(c *mygoui.Context, t *mygoui.Theme, tab *app.Tab) {
 				dir = "descending"
 			}
 			mygoui.Text(c, fmt.Sprintf("Sorted by %s, %s", d.Sort.Column, dir)).FontSize(12).TextColor(t.TextMuted).SingleLine()
-			if mygoui.Button(c, "Clear sort").Clicked() {
+			if sh.fade(mygoui.Button(c, "Clear sort")).Clicked() {
 				_ = sh.st.SetSort(tab, nil)
 				c.Invalidate()
 			}

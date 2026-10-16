@@ -408,11 +408,11 @@ func (sh *Shell) sidebar(c *mygoui.Context, t *mygoui.Theme) {
 			}
 		}
 		mygoui.Row(c).Gap(6).Children(func() {
-			if mygoui.Button(c, "+ Connection").Disabled(readOnly).Clicked() {
+			if sh.fade(mygoui.Button(c, "+ Connection")).Disabled(readOnly).Clicked() {
 				sh.openConnForm("", e.selectedFolder())
 				c.Invalidate()
 			}
-			if mygoui.Button(c, "+ Folder").Disabled(readOnly).Clicked() {
+			if sh.fade(mygoui.Button(c, "+ Folder")).Disabled(readOnly).Clicked() {
 				sh.openNameDialog(nameNewFolder, "", "")
 				c.Invalidate()
 			}
@@ -462,7 +462,7 @@ func (sh *Shell) explorerRow(c *mygoui.Context, t *mygoui.Theme, id string) {
 		status := sh.st.Conns.Status(id)
 		glyph, color := statusGlyph(status, t)
 		row.ContextMenu(func(m *mygoui.Menu) { sh.connectionMenu(m, n) }).Children(func() {
-			mygoui.Text(c, glyph).TextColor(color).Label(status.String())
+			mygoui.Text(c, glyph).TextColor(color).Label(status.String()).ContentTransition(statusFade)
 			mygoui.Icon(c, icons.Connection)
 			text := mygoui.Text(c, n.label).SingleLine()
 			if status == connection.Failed {

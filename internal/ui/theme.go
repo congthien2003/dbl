@@ -45,6 +45,16 @@ func explorerTheme(t *mygoui.Theme) mygoui.Theme {
 	return et
 }
 
+// gridTheme is t with the color of the grid's chosen row paler: the accent
+// at 18% over the background, with the ordinary text on it. The chosen cell
+// is drawn on top of it with Palette.ActiveCell and the full accent border.
+func gridTheme(t *mygoui.Theme) mygoui.Theme {
+	gt := *t
+	gt.Accent = t.Accent.Alpha(0.18).Over(t.Background)
+	gt.AccentText = t.Text
+	return gt
+}
+
 // ThemeSource maps the saved preference to MyGo's theme source. Unknown
 // values follow the system.
 func ThemeSource(p storage.ThemePref) mygo.ThemeSource {
