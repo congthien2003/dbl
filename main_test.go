@@ -189,8 +189,18 @@ func TestConnectionsNoticeSaysWhetherABackupExists(t *testing.T) {
 }
 
 func TestConnectDriverRoutesByDriver(t *testing.T) {
-	_, err := connectDriver(context.Background(), connection.Profile{Driver: connection.DriverMySQL}, "")
+	_, err := connectDriver(context.Background(), connection.Profile{Driver: connection.DriverSQLServer}, "")
 	if database.KindOf(err) != database.KindUnsupported {
+		t.Errorf("SQL Server: %v", err)
+	}
+
+	// MySQL reaches the MySQL adapter: nothing listens on port 1, which is
+	// a connection error, not an unsupported driver.
+	_, err = connectDriver(context.Background(), connection.Profile{
+		Driver: connection.DriverMySQL, Name: "m", Host: "127.0.0.1", Port: 1, Username: "u",
+		TLS: connection.TLSOptions{Mode: connection.TLSDisable}, ConnectTimeoutSec: 2,
+	}, "")
+	if k := database.KindOf(err); k == database.KindUnsupported || k == 0 {
 		t.Errorf("MySQL: %v", err)
 	}
 

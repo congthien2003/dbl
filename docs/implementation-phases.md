@@ -602,6 +602,50 @@ Tất cả probe đang ở trạng thái `Not run`; kết quả người dùng c
 - [ ] Unicode/collation, precision, NULL, composite keys, filter operators và pagination.
 - [ ] Conflict, rollback, affected-row semantics, transaction support và MySQL/MariaDB compatibility theo phiên bản đã chốt.
 
+**Kết quả triển khai Phase 3.2 (2026-10-17):** đã thêm kết nối MySQL/MariaDB vào bước chọn loại và dùng form mạng chung (port 3306, Database tùy chọn). Đã thêm adapter `internal/database/mysql/` dùng `github.com/go-sql-driver/mysql` v1.10.1, gồm:
+
+- Explorer: database-as-schema, ẩn 4 database hệ thống. Node gốc ghi `host:port · <server> <version>`; phiên bản ngoài MySQL 8.0+ / MariaDB 10.6+ có thêm "(untested version)".
+- Metadata từ `information_schema`, đọc trang/lọc/sắp xếp.
+- Save có kiểm tra xung đột chính xác.
+- SQL tab có bộ tách statement riêng.
+
+Thiết kế theo [spec](superpowers/specs/2026-10-17-phase-3-2-mysql-design.md) và [plan](superpowers/plans/2026-10-17-phase-3-2-mysql.md). Trạng thái **chờ người dùng kiểm tra app và nghiệm thu**; các checklist trên chưa được xác nhận.
+
+Đã chạy tự động:
+- `gofmt`, `CGO_ENABLED=0 go build ./...`, `go vet ./...` (chỉ còn cảnh báo `SQLSpan` có từ trước), `go test ./...`.
+- Integration test MySQL (28 test) chạy và pass trên container Docker MySQL 8.0.46, MySQL 8.4.11 và MariaDB 11.4.13 (`dbl-mysql80`, `dbl-mysql84`, `dbl-mariadb114`; các container được giữ lại). Bộ test chạy hai lần trên cả ba server: một lần với TLS `disable`, một lần với `require`.
+- `verify-ca` với CA của MySQL 8.4 kết nối được và có mã hoá. `verify-full` tới `127.0.0.1` bị từ chối đúng, vì chứng chỉ tự sinh không ghi IP này. `verify-ca` với CA khác cũng bị từ chối (`TestIntegrationTLSVerification`, cần `DBL_TEST_MYSQL_CA`).
+
+**Chưa kiểm:**
+- Manual app testing.
+- `verify-full` thành công với chứng chỉ có hostname đúng (chưa có server như vậy để thử).
+- PostgreSQL integration (skip vì thiếu `DBL_TEST_PG_*`).
+- MariaDB 10.6 và MySQL 9.x.
+
+Hai lỗi test có từ trước vẫn còn: `TestMenuNewSQLTabIsBoundToTheConnection` fail; `TestPendingEditSaveRunsTheActionOnlyAfterCommit` lúc pass lúc fail.
+
+**Quyết định khi triển khai (lệch hoặc làm rõ so với plan):**
+
+- **Dạng text của giá trị.** Trang dữ liệu đọc mọi cột không phải binary dưới dạng `CAST(col AS CHAR)`. Text hiển thị vì thế giống nhau dù truy vấn có tham số (binary protocol) hay không. Save so sánh giá trị cũ bằng bytes của chính text này, `CAST(CAST(col AS CHAR) AS BINARY) = CAST(? AS BINARY)`, thay cho `<=>` cộng `CONVERT USING charset` như plan. Cách này áp dụng cho mọi kiểu, không cần biết charset của cột. NULL so bằng `IS NULL`. Cột khoá dùng thêm `=` để server dùng index, trừ cột FLOAT/DOUBLE.
+- **Kiểu giá trị mới khi Save.** Giá trị mới được bind dưới dạng text và server tự chuyển kiểu. Save chạy trên connection riêng, thêm `STRICT_ALL_TABLES` vào `sql_mode` rồi khôi phục sau; nếu khôi phục lỗi thì bỏ connection đó. Cảnh báo mức Warning/Error trong lúc Save làm rollback; Note thì bỏ qua.
+- **SQL tab.**
+  - Mỗi tab có pool riêng một connection. Số dòng ảnh hưởng theo nghĩa của MySQL client: số dòng thực sự đổi, không phải số dòng khớp.
+  - Trạng thái giao dịch và `NO_BACKSLASH_ESCAPES` lấy từ cờ status server gửi về. Số dòng ảnh hưởng lấy từ gói OK. Driver giữ cả hai nhưng không export, nên adapter đọc bằng reflection; test `TestIntegrationSessionReadsServerStatus` chốt điều này với driver v1.10.1. Không dùng `@@in_transaction` vì MySQL không có biến này.
+  - Cảnh báo đọc bằng `SHOW WARNINGS`. Không dùng `SELECT @@warning_count` vì câu này xoá danh sách cảnh báo.
+  - Cancel gửi `KILL QUERY` từ pool chính, nên giữ được phiên và transaction (có test). Nếu statement không dừng trong 2 giây thì mới đóng connection, khi đó phiên mất.
+  - Dòng `DELIMITER` bị từ chối kèm hướng dẫn. Khối `BEGIN … END` của procedure/function/trigger/event được nhận đúng, kể cả `IF`/`CASE`/`LOOP`/`WHILE`/`REPEAT` lồng nhau.
+  - Giá trị FLOAT/DOUBLE trong SQL tab được Go định dạng (vd. `1e+100`), có thể khác cách server in trong grid (`1e100`).
+- **Phân loại cột.**
+  - `TINYINT(1)` là số. `BIT`, kiểu không gian và `vector` là binary.
+  - `auto_increment` là identity, không sửa được, giống identity của PostgreSQL.
+  - JSON của MariaDB (LONGTEXT với `CHECK json_valid`) được nhận là JSON.
+  - Thêm `ColumnMetadata.Unsigned`; `checkNumber` kiểm phạm vi không dấu và các kiểu số của MySQL.
+- **Chỉ đọc.** Bảng có engine không hỗ trợ transaction (theo `information_schema.ENGINES`, vd. MyISAM, MEMORY) chỉ đọc, kèm lý do.
+- **Kết nối không có database mặc định.** Câu SQL không ghi tên database sẽ lỗi "No database selected" (báo là lỗi dữ liệu, kèm gợi ý dùng `db`.`table`, `USE db` hoặc đặt database mặc định). Đây là hành vi mong đợi.
+- **Quyền xem.** `information_schema` chỉ trả về đối tượng user có quyền. Bảng không được phép xem vì thế không hiện trong explorer, thay vì hiện lỗi "denied".
+- **TLS.** `require` không kiểm chứng chỉ. `verify-ca` tự kiểm chuỗi chứng chỉ, không kiểm hostname. Không có fallback về plaintext. Khi TLS tắt, driver tự lấy public key RSA của server cho `caching_sha2_password`.
+- **Test.** Test viết sau mã nguồn, nên bước "xác nhận test FAIL trước" không được quan sát.
+
 ## 12. Phase 3.3 — SQL Server
 
 **Mục tiêu:** hoàn thành bộ relational drivers trong spec.

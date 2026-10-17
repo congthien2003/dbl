@@ -149,6 +149,9 @@ type ColumnMetadata struct {
 	// IntBits is the width of an integer column, 0 when it is not known
 	// from the native type's name (SQLite's INTEGER is 64 bits).
 	IntBits int
+	// Unsigned says an integer column takes no negative values (MySQL's
+	// UNSIGNED), so its range is 0 to 2^IntBits-1.
+	Unsigned bool
 }
 
 // SectionState says why a section of metadata has the items it has. An

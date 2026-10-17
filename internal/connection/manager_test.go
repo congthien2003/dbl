@@ -595,7 +595,7 @@ func TestConnectionsAreIndependent(t *testing.T) {
 
 func TestUnsupportedDriverFailsWithoutConnecting(t *testing.T) {
 	r := newRig(t)
-	r.cat.Profiles = append(r.cat.Profiles, Profile{ID: "old", Name: "Old", Driver: DriverMySQL})
+	r.cat.Profiles = append(r.cat.Profiles, Profile{ID: "old", Name: "Old", Driver: DriverSQLServer})
 	r.m.Connect("old")
 	r.conn.expectNoCall(t)
 	if r.m.Status("old") != Failed || r.m.Err("old").Kind != database.KindUnsupported {

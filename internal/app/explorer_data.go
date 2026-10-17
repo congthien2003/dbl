@@ -1,7 +1,10 @@
 package app
 
 import (
+	"net"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"dbl/internal/connection"
 	"dbl/internal/database"
@@ -41,6 +44,9 @@ func (t *ConnTree) Schema(name string) *SchemaNode {
 	return nil
 }
 
+// serverLabeler is a session that can name its server for the explorer.
+type serverLabeler interface{ ServerLabel() string }
+
 // ExplorerData holds the trees of the connected connections. Rev changes
 // whenever anything in it does, so the view rebuilds only then.
 type ExplorerData struct {
@@ -75,8 +81,18 @@ func (s *State) Tree(connectionID string) *ConnTree {
 	t = &ConnTree{Epoch: epoch}
 	if p, ok := s.Catalog.Profile(connectionID); ok {
 		t.Database = p.Database
-		if p.Driver == connection.DriverSQLite {
+		switch p.Driver {
+		case connection.DriverSQLite:
 			t.Database = filepath.Base(p.SQLitePath)
+		case connection.DriverMySQL:
+			// A MySQL connection reaches a server, whose databases are the
+			// schemas below it.
+			t.Database = net.JoinHostPort(strings.Trim(p.Host, "[]"), strconv.Itoa(p.Port))
+			if ad, ok := s.Conns.SQL(connectionID); ok {
+				if l, ok := ad.(serverLabeler); ok {
+					t.Database = l.ServerLabel()
+				}
+			}
 		}
 	}
 	ex.trees[connectionID] = t

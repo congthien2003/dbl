@@ -116,7 +116,7 @@ func (sh *Shell) openConnForm(editID, folderID string) {
 // setDefaults gives the fields of the chosen type the values of a new
 // connection. The name and the folder are the user's whatever the type.
 func (f *connForm) setDefaults() {
-	f.host, f.port, f.database, f.user = "", strconv.Itoa(connection.DefaultPort), "", ""
+	f.host, f.port, f.database, f.user = "", strconv.Itoa(f.driver.DefaultPort()), "", ""
 	f.password, f.rootCert, f.remove = "", "", false
 	f.path, f.readOnly = "", false
 	f.timeout = strconv.Itoa(connection.DefaultConnectTimeoutSec)
@@ -126,15 +126,28 @@ func (f *connForm) setDefaults() {
 
 // chooseDriver moves a new connection to the fields of d. Choosing the type
 // the form already had keeps what was typed; another type starts from its
-// defaults.
+// defaults, such as its port.
 func (f *connForm) chooseDriver(d connection.DriverType) {
 	if f.driver != d {
-		if f.driver != "" {
-			f.setDefaults()
-		}
 		f.driver = d
+		f.setDefaults()
 	}
 	f.step = stepFields
+}
+
+// fieldHints are the placeholders of the network fields, which differ by
+// engine.
+type fieldHints struct{ name, port, database, databaseHint, user string }
+
+func hintsFor(d connection.DriverType) fieldHints {
+	if d == connection.DriverMySQL {
+		return fieldHints{
+			name: "Local MySQL", port: "3306", database: "Optional",
+			databaseHint: "The database to start in. Leave it empty to choose later; every database you may see is listed.",
+			user:         "root",
+		}
+	}
+	return fieldHints{name: "Local PostgreSQL", port: "5432", database: "postgres", user: "postgres"}
 }
 
 func (f *connForm) setFolder(id string) {
@@ -310,6 +323,7 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 				})
 				return
 			}
+			hints := hintsFor(f.driver)
 			mygoui.Scroll(c).MaxHeight(scrollMax).Children(func() {
 				mygoui.Form(c, func() {
 					submitOn := func(e mygoui.Element) {
@@ -318,7 +332,7 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 						}
 					}
 					mygoui.Field(c, "Name", func() {
-						submitOn(mygoui.TextInput(c, &f.name).AutoFocus().Placeholder("Local PostgreSQL"))
+						submitOn(mygoui.TextInput(c, &f.name).AutoFocus().Placeholder(hints.name))
 					}).Error(f.errs[connection.FieldName])
 					mygoui.Field(c, "Folder", func() {
 						mygoui.Select(c, &f.folder, f.folderLabels)
@@ -326,7 +340,7 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 					mygoui.Field(c, "Driver", func() {
 						driver := f.driver.Label()
 						mygoui.Select(c, &driver, []string{driver}).Disabled(true)
-					}).Error(f.errs[connection.FieldDriver])
+					}).Description(driverHint(f.driver)).Error(f.errs[connection.FieldDriver])
 					if f.driver == connection.DriverSQLite {
 						sh.sqliteFields(c, t, f, submitOn)
 						return
@@ -335,13 +349,13 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 						submitOn(mygoui.TextInput(c, &f.host).Placeholder("localhost"))
 					}).Error(f.errs[connection.FieldHost])
 					mygoui.Field(c, "Port", func() {
-						submitOn(mygoui.TextInput(c, &f.port).Placeholder("5432"))
+						submitOn(mygoui.TextInput(c, &f.port).Placeholder(hints.port))
 					}).Error(f.errs[connection.FieldPort])
 					mygoui.Field(c, "Database", func() {
-						submitOn(mygoui.TextInput(c, &f.database).Placeholder("postgres"))
-					}).Error(f.errs[connection.FieldDatabase])
+						submitOn(mygoui.TextInput(c, &f.database).Placeholder(hints.database))
+					}).Description(hints.databaseHint).Error(f.errs[connection.FieldDatabase])
 					mygoui.Field(c, "Username", func() {
-						submitOn(mygoui.TextInput(c, &f.user).Placeholder("postgres"))
+						submitOn(mygoui.TextInput(c, &f.user).Placeholder(hints.user))
 					}).Error(f.errs[connection.FieldUsername])
 					mygoui.Field(c, "Password", func() {
 						submitOn(mygoui.TextInput(c, &f.password).Password().Placeholder(passwordPlaceholder(f)))
@@ -495,6 +509,14 @@ func (sh *Shell) postUI(fn func()) {
 		return
 	}
 	sh.st.Conns.Post(fn)
+}
+
+// driverHint says what a driver covers, when it is more than its name.
+func driverHint(d connection.DriverType) string {
+	if d == connection.DriverMySQL {
+		return "Works with MySQL 8.0+ and MariaDB 10.6+."
+	}
+	return ""
 }
 
 func passwordPlaceholder(f *connForm) string {

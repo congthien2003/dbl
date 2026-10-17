@@ -1001,3 +1001,48 @@ func TestEditSQLiteLoadsPathAndReadOnly(t *testing.T) {
 		t.Errorf("saved %+v", got)
 	}
 }
+
+func openNewMySQLForm(t *testing.T, e *uiEnv) {
+	t.Helper()
+	openNewPicker(t, e)
+	click(t, e.tt, "MySQL")
+	if e.sh.form.driver != connection.DriverMySQL || e.sh.form.step != stepFields {
+		t.Fatalf("form %+v", e.sh.form)
+	}
+}
+
+func TestPickingMySQLOpensFormWithPort3306(t *testing.T) {
+	e := newEmptyEnv(t)
+	openNewMySQLForm(t, e)
+	f := e.sh.form
+	if f.port != "3306" || f.tls != string(connection.DefaultTLSMode) || f.timeout != "10" {
+		t.Errorf("defaults: port %q tls %q timeout %q", f.port, f.tls, f.timeout)
+	}
+	for _, want := range []string{"Host", "Port", "Database", "Username", "Password", "TLS", "Works with MySQL 8.0+ and MariaDB 10.6+."} {
+		if !e.tt.HasText(want) {
+			t.Errorf("the form lacks %q; texts %q", want, e.tt.Texts())
+		}
+	}
+	// Going back and choosing PostgreSQL gives PostgreSQL's port.
+	click(t, e.tt, "Back")
+	click(t, e.tt, "PostgreSQL")
+	if e.sh.form.port != "5432" {
+		t.Errorf("PostgreSQL port %q", e.sh.form.port)
+	}
+}
+
+func TestMySQLSaveWithoutDatabase(t *testing.T) {
+	e := newEmptyEnv(t)
+	openNewMySQLForm(t, e)
+	fill(t, e.tt, "Name", "Shop")
+	fill(t, e.tt, "Host", "db.internal")
+	fill(t, e.tt, "Username", "root")
+	click(t, e.tt, "Save")
+	if e.tt.HasText("New connection") {
+		t.Fatalf("the form stayed open; texts %q", e.tt.Texts())
+	}
+	p := e.profile("Shop")
+	if p.Driver != connection.DriverMySQL || p.Port != 3306 || p.Database != "" || p.Host != "db.internal" {
+		t.Errorf("saved %+v", p)
+	}
+}

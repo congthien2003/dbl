@@ -54,7 +54,7 @@ func TestValidate(t *testing.T) {
 	}{
 		{"empty name", func(p *Profile) { p.Name = "" }, FieldName},
 		{"long name", func(p *Profile) { p.Name = strings.Repeat("é", MaxNameLen+1) }, FieldName},
-		{"unsupported driver", func(p *Profile) { p.Driver = DriverMySQL }, FieldDriver},
+		{"unsupported driver", func(p *Profile) { p.Driver = DriverSQLServer }, FieldDriver},
 		{"empty driver", func(p *Profile) { p.Driver = "" }, FieldDriver},
 		{"empty host", func(p *Profile) { p.Host = "" }, FieldHost},
 		{"comma host", func(p *Profile) { p.Host = "a,b" }, FieldHost},
@@ -316,7 +316,7 @@ func TestNormalizeRepairsACatalog(t *testing.T) {
 	noID.ID, noID.Name = "", "NoID"
 	dup := good
 	dup.Name = "Dup"
-	unsupported := Profile{ID: "u", Name: "Old MySQL", Driver: DriverMySQL}
+	unsupported := Profile{ID: "u", Name: "Old SQL Server", Driver: DriverSQLServer}
 	c := Catalog{
 		Folders:  []Folder{{ID: "f1", Name: " Work "}, {ID: "", Name: "x"}, {ID: "f1", Name: "again"}},
 		Profiles: []Profile{good, orphan, noID, dup, unsupported},
@@ -335,7 +335,7 @@ func TestNormalizeRepairsACatalog(t *testing.T) {
 	if p, _ := c.Profile("b"); p.FolderID != "" {
 		t.Errorf("orphan profile is still in %q", p.FolderID)
 	}
-	if p, _ := c.Profile("u"); p.Driver != DriverMySQL {
+	if p, _ := c.Profile("u"); p.Driver != DriverSQLServer {
 		t.Error("a profile with an unsupported driver was changed")
 	}
 	if len(warnings) != 5 {
@@ -344,8 +344,8 @@ func TestNormalizeRepairsACatalog(t *testing.T) {
 }
 
 func TestDriverAndTLSHelpers(t *testing.T) {
-	if !DriverPostgres.Supported() || DriverMySQL.Supported() || DriverRedis.Supported() {
-		t.Error("only PostgreSQL is supported in this version")
+	if !DriverPostgres.Supported() || !DriverSQLite.Supported() || !DriverMySQL.Supported() || DriverSQLServer.Supported() || DriverRedis.Supported() {
+		t.Error("PostgreSQL, SQLite and MySQL are supported in this version")
 	}
 	if DriverPostgres.Label() != "PostgreSQL" || DriverType("x").Label() != "x" {
 		t.Error("labels")
@@ -482,5 +482,40 @@ func TestValidateFilesSQLitePathIsDirectory(t *testing.T) {
 	p.SQLitePath = file
 	if errs := p.ValidateFiles(); len(errs) != 0 {
 		t.Errorf("an existing file was refused: %+v", errs)
+	}
+}
+
+func TestMySQLProfileDatabaseOptional(t *testing.T) {
+	p := Profile{Name: "m", Driver: DriverMySQL, Host: "h", Port: 3306, Username: "root"}.Normalized()
+	if errs := p.Validate(); len(errs) != 0 {
+		t.Errorf("MySQL without a database: %v", fieldsOf(errs))
+	}
+	p.Driver = DriverPostgres
+	found := false
+	for _, e := range p.Validate() {
+		found = found || e.Field == FieldDatabase
+	}
+	if !found {
+		t.Error("PostgreSQL still requires a database")
+	}
+}
+
+func TestDefaultPortPerDriver(t *testing.T) {
+	cases := map[DriverType]int{DriverPostgres: 5432, DriverMySQL: 3306, DriverSQLServer: 1433, DriverRedis: 6379, DriverSQLite: 0}
+	for d, want := range cases {
+		if got := d.DefaultPort(); got != want {
+			t.Errorf("%s: port %d, want %d", d, got, want)
+		}
+	}
+}
+
+func TestTargetMySQL(t *testing.T) {
+	p := Profile{Driver: DriverMySQL, Host: "h", Username: "root"}
+	if got := p.Target(); got != "root@h" {
+		t.Errorf("without database: %q", got)
+	}
+	p.Database = "shop"
+	if got := p.Target(); got != "shop (root@h)" {
+		t.Errorf("with database: %q", got)
 	}
 }

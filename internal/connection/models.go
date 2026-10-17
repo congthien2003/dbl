@@ -17,8 +17,9 @@ import (
 // DriverType names a database engine (spec 6.1).
 type DriverType string
 
-// Driver types. Only PostgreSQL and SQLite can connect in this version; the
-// others are kept so a profile written for them is preserved, not lost.
+// Driver types. PostgreSQL, SQLite and MySQL (which covers MariaDB) can
+// connect in this version; the others are kept so a profile written for
+// them is preserved, not lost.
 const (
 	DriverPostgres  DriverType = "postgres"
 	DriverMySQL     DriverType = "mysql"
@@ -32,7 +33,25 @@ const (
 var Drivers = []DriverType{DriverPostgres, DriverSQLite, DriverMySQL, DriverSQLServer, DriverRedis}
 
 // Supported reports whether this version can connect with the driver.
-func (d DriverType) Supported() bool { return d == DriverPostgres || d == DriverSQLite }
+func (d DriverType) Supported() bool {
+	return d == DriverPostgres || d == DriverSQLite || d == DriverMySQL
+}
+
+// DefaultPort is the port a new profile of the driver starts with, 0 for a
+// driver that has none.
+func (d DriverType) DefaultPort() int {
+	switch d {
+	case DriverPostgres:
+		return DefaultPort
+	case DriverMySQL:
+		return 3306
+	case DriverSQLServer:
+		return 1433
+	case DriverRedis:
+		return 6379
+	}
+	return 0
+}
 
 // Label is the name shown to the user.
 func (d DriverType) Label() string {
@@ -84,7 +103,7 @@ func (m TLSMode) Verifies() bool { return m == TLSVerifyCA || m == TLSVerifyFull
 
 // Defaults and limits of a profile.
 const (
-	DefaultPort              = 5432
+	DefaultPort              = 5432 // PostgreSQL's; see DriverType.DefaultPort
 	DefaultConnectTimeoutSec = 10
 	MaxConnectTimeoutSec     = 300
 	DefaultMaxOpen           = 2
@@ -128,10 +147,14 @@ type Profile struct {
 }
 
 // Target names what the profile connects to, for places that list
-// connections: "db (user@host)" for PostgreSQL, the file name for SQLite.
+// connections: "db (user@host)" for a server, "user@host" for a MySQL
+// profile without a default database, the file name for SQLite.
 func (p Profile) Target() string {
 	if p.Driver == DriverSQLite {
 		return filepath.Base(p.SQLitePath)
+	}
+	if p.Database == "" {
+		return fmt.Sprintf("%s@%s", p.Username, p.Host)
 	}
 	return fmt.Sprintf("%s (%s@%s)", p.Database, p.Username, p.Host)
 }
@@ -275,7 +298,9 @@ func (p Profile) Validate() []FieldError {
 	if p.Port < 1 || p.Port > 65535 {
 		errs = append(errs, FieldError{FieldPort, "Port must be between 1 and 65535"})
 	}
-	if p.Database == "" {
+	// A MySQL server holds many databases; the profile's is only the one
+	// to start in, so it may be left out.
+	if p.Database == "" && p.Driver != DriverMySQL {
 		errs = append(errs, FieldError{FieldDatabase, "Database is required"})
 	}
 	if p.Username == "" {

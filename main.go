@@ -1,5 +1,6 @@
 // Command dbl is SBDb, a desktop database manager built with MyGo's native
-// UI. It keeps connection profiles and opens PostgreSQL and SQLite sessions.
+// UI. It keeps connection profiles and opens PostgreSQL, SQLite and
+// MySQL/MariaDB sessions.
 package main
 
 import (
@@ -18,6 +19,7 @@ import (
 	"dbl/internal/app"
 	"dbl/internal/connection"
 	"dbl/internal/database"
+	"dbl/internal/database/mysql"
 	"dbl/internal/database/postgres"
 	"dbl/internal/database/sqlite"
 	"dbl/internal/storage"
@@ -122,6 +124,8 @@ func connectDriver(ctx context.Context, p connection.Profile, password string) (
 		return postgres.Connect(ctx, p, password)
 	case connection.DriverSQLite:
 		return sqlite.Connect(ctx, p, password)
+	case connection.DriverMySQL:
+		return mysql.Connect(ctx, p, password)
 	}
 	return nil, &database.Error{Kind: database.KindUnsupported, Message: p.Driver.Label() + " connections are not supported yet"}
 }

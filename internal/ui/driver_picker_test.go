@@ -24,7 +24,7 @@ func TestPickerDisablesUnsupportedDrivers(t *testing.T) {
 	if !e.tt.HasText("Soon") {
 		t.Error("an unsupported driver is not marked Soon")
 	}
-	for _, name := range []string{"MySQL", "SQL Server", "Redis"} {
+	for _, name := range []string{"SQL Server", "Redis"} {
 		click(t, e.tt, name)
 		if e.sh.form.step != stepPickDriver || e.sh.form.driver != "" {
 			t.Fatalf("clicking %s chose it: step %v driver %q", name, e.sh.form.step, e.sh.form.driver)

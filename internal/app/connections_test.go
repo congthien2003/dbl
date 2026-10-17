@@ -404,11 +404,11 @@ func TestEditKeepSetRemovePassword(t *testing.T) {
 
 func TestEditUnsupportedDriverIsBlocked(t *testing.T) {
 	e := newEnv(t)
-	e.s.Catalog.Profiles = append(e.s.Catalog.Profiles, connection.Profile{ID: "old", Name: "Old", Driver: connection.DriverMySQL, Host: "h", Port: 3306, Database: "d", Username: "u"})
+	e.s.Catalog.Profiles = append(e.s.Catalog.Profiles, connection.Profile{ID: "old", Name: "Old", Driver: connection.DriverSQLServer, Host: "h", Port: 1433, Database: "d", Username: "u"})
 	edit := e.s.Catalog.Profiles[0]
 	edit.Driver = connection.DriverPostgres // what the form would send
 	_, err := e.s.SaveProfile(edit, connection.PasswordChange{})
-	if err == nil || e.s.Catalog.Profiles[0].Driver != connection.DriverMySQL {
+	if err == nil || e.s.Catalog.Profiles[0].Driver != connection.DriverSQLServer {
 		t.Errorf("the driver of an unsupported profile was rewritten: %v", err)
 	}
 	// Rename and delete still work.

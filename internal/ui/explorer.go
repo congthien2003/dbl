@@ -209,14 +209,17 @@ func (e *explorer) addDatabase(st *app.State, p connection.Profile) {
 		return
 	}
 	if e.autoOpened[p.ID] != tree.Epoch {
-		// A session just began: show the database, which is all there is
-		// to choose from for a PostgreSQL connection.
+		// A session just began: show the database and its schemas.
 		e.autoOpened[p.ID] = tree.Epoch
 		e.state.Open.Add(p.ID)
 		e.state.Open.Add(dbItem(p.ID))
-		if p.Driver == connection.DriverSQLite {
+		switch {
+		case p.Driver == connection.DriverSQLite:
 			// A file has one schema, main: show its tables too.
 			e.state.Open.Add(schemaItem(p.ID, "main"))
+		case p.Driver == connection.DriverMySQL && p.Database != "":
+			// The database the profile starts in.
+			e.state.Open.Add(schemaItem(p.ID, p.Database))
 		}
 	}
 	db := dbItem(p.ID)

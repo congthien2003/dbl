@@ -191,16 +191,21 @@ func baseType(native string) string {
 
 func checkNumber(c ColumnMetadata, text string) string {
 	if c.IntBits > 0 {
+		if c.Unsigned {
+			return checkUint(text, c.IntBits)
+		}
 		return checkInt(text, c.IntBits)
 	}
-	switch baseType(c.NativeType) {
+	// MySQL spells its attributes after the type: "double unsigned".
+	native := strings.TrimSuffix(strings.TrimSuffix(baseType(c.NativeType), " zerofill"), " unsigned")
+	switch native {
 	case "smallint", "int2":
 		return checkInt(text, 16)
 	case "integer", "int", "int4":
 		return checkInt(text, 32)
 	case "bigint", "int8":
 		return checkInt(text, 64)
-	case "numeric", "decimal", "real", "float4", "double precision", "float8":
+	case "numeric", "decimal", "real", "float4", "double precision", "float8", "float", "double":
 		switch strings.ToLower(strings.TrimLeft(text, "+-")) {
 		case "nan", "infinity", "inf":
 			return ""
@@ -208,6 +213,19 @@ func checkNumber(c ColumnMetadata, text string) string {
 		if !decimalRE.MatchString(text) {
 			return "Not a number."
 		}
+	}
+	return ""
+}
+
+func checkUint(text string, bits int) string {
+	if _, err := strconv.ParseUint(text, 10, bits); err != nil {
+		if ne, ok := err.(*strconv.NumError); ok && ne.Err == strconv.ErrRange {
+			return fmt.Sprintf("Out of range for an unsigned %d-bit integer.", bits)
+		}
+		if strings.HasPrefix(text, "-") {
+			return "This column does not accept negative numbers."
+		}
+		return "Not a whole number."
 	}
 	return ""
 }

@@ -223,3 +223,28 @@ func TestReadOnlyTableIsNotEditable(t *testing.T) {
 		t.Error(why)
 	}
 }
+
+func TestCheckNumberUnsignedAndMySQLWidths(t *testing.T) {
+	cases := []struct {
+		c    ColumnMetadata
+		text string
+		ok   bool
+	}{
+		{ColumnMetadata{IntBits: 64, Unsigned: true}, "18446744073709551615", true},
+		{ColumnMetadata{IntBits: 64, Unsigned: true}, "18446744073709551616", false},
+		{ColumnMetadata{IntBits: 8, Unsigned: true}, "-1", false},
+		{ColumnMetadata{IntBits: 8}, "-128", true},
+		{ColumnMetadata{IntBits: 8}, "128", false},
+		{ColumnMetadata{IntBits: 24}, "8388607", true},
+		{ColumnMetadata{IntBits: 24}, "8388608", false},
+		{ColumnMetadata{NativeType: "double unsigned"}, "abc", false},
+		{ColumnMetadata{NativeType: "decimal(10,2) unsigned zerofill"}, "1.5", true},
+		{ColumnMetadata{NativeType: "float"}, "1e3", true},
+	}
+	for _, c := range cases {
+		c.c.Class = ClassNumber
+		if got := checkNumber(c.c, c.text) == ""; got != c.ok {
+			t.Errorf("%+v %q: ok %v, want %v", c.c, c.text, got, c.ok)
+		}
+	}
+}
