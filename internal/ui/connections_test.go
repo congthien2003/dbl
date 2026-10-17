@@ -2,6 +2,8 @@ package ui
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -408,12 +410,21 @@ func TestPasswordPromptCancel(t *testing.T) {
 
 // ---- The connection form ----
 
-func openNewForm(t *testing.T, e *uiEnv) {
+// openNewPicker opens the new-connection dialog on its first step, the choice
+// of the database type.
+func openNewPicker(t *testing.T, e *uiEnv) {
 	t.Helper()
 	click(t, e.tt, "+ Connection")
 	if !e.tt.HasText("New connection") {
 		t.Fatalf("no form; texts %q", e.tt.Texts())
 	}
+}
+
+// openNewForm opens the new-connection dialog and chooses PostgreSQL.
+func openNewForm(t *testing.T, e *uiEnv) {
+	t.Helper()
+	openNewPicker(t, e)
+	click(t, e.tt, "PostgreSQL")
 }
 
 func fillValidForm(t *testing.T, e *uiEnv) {
@@ -484,6 +495,7 @@ func TestNewConnectionInTheChosenFolder(t *testing.T) {
 	if !e.tt.HasText("New connection") {
 		t.Fatal("no form")
 	}
+	click(t, e.tt, "PostgreSQL")
 	fillValidForm(t, e)
 	click(t, e.tt, "Save")
 	got := e.profile("Reporting")
@@ -786,5 +798,206 @@ func TestFormUsesTheHeightOfALargeWindow(t *testing.T) {
 		if !ok || r.Y+r.H > 800 || (label == "Save" && r.W == 0) {
 			t.Errorf("%q at %+v in the 1280x800 window", label, r)
 		}
+	}
+}
+
+// ---- The choice of the database type ----
+
+func TestNewConnectionStartsWithPicker(t *testing.T) {
+	e := newEmptyEnv(t)
+	openNewPicker(t, e)
+	if e.sh.form == nil || e.sh.form.step != stepPickDriver {
+		t.Fatalf("form %+v", e.sh.form)
+	}
+	for _, field := range []string{"Host", "Port", "Username", "Password", "Test connection", "Save"} {
+		if e.tt.HasText(field) {
+			t.Errorf("the picker shows the field %q", field)
+		}
+	}
+}
+
+func TestPickingPostgresOpensTheFormWithDefaults(t *testing.T) {
+	e := newEmptyEnv(t)
+	openNewForm(t, e)
+	f := e.sh.form
+	if f.step != stepFields || f.driver != connection.DriverPostgres {
+		t.Fatalf("step %v driver %q", f.step, f.driver)
+	}
+	if f.port != "5432" || f.tls != string(connection.DefaultTLSMode) || f.timeout != "10" {
+		t.Errorf("defaults: port %q tls %q timeout %q", f.port, f.tls, f.timeout)
+	}
+	for _, want := range []string{"Host", "Port", "Back", "Save"} {
+		if !e.tt.HasText(want) {
+			t.Errorf("the form lacks %q", want)
+		}
+	}
+}
+
+func TestEditSkipsPickerAndLocksDriver(t *testing.T) {
+	e := newEnv(t)
+	e.tt.RightClick("Local PG")
+	if err := e.tt.ChooseMenuItem("Edit…"); err != nil {
+		t.Fatal(err)
+	}
+	e.tt.Frame()
+	f := e.sh.form
+	if f == nil || f.step != stepFields || f.driver != connection.DriverPostgres {
+		t.Fatalf("form %+v", f)
+	}
+	if e.tt.HasText("Choose a database type") || e.tt.HasText("Back") {
+		t.Errorf("an edit shows the picker or Back; texts %q", e.tt.Texts())
+	}
+	if !e.tt.HasText("PostgreSQL") {
+		t.Error("the form does not name the driver")
+	}
+}
+
+func TestBackReturnsToPickerKeepingInput(t *testing.T) {
+	e := newEmptyEnv(t)
+	openNewForm(t, e)
+	fillValidForm(t, e)
+	click(t, e.tt, "Back")
+	if e.sh.form.step != stepPickDriver || !e.tt.HasText("Choose a database type") {
+		t.Fatalf("step %v; texts %q", e.sh.form.step, e.tt.Texts())
+	}
+	click(t, e.tt, "PostgreSQL")
+	f := e.sh.form
+	if f.step != stepFields || f.name != "Reporting" || f.host != "db.internal" || f.database != "reports" {
+		t.Errorf("input was lost: %+v", f)
+	}
+}
+
+// ---- The SQLite form ----
+
+func openNewSQLiteForm(t *testing.T, e *uiEnv) {
+	t.Helper()
+	openNewPicker(t, e)
+	click(t, e.tt, "SQLite")
+	if e.sh.form.driver != connection.DriverSQLite || e.sh.form.step != stepFields {
+		t.Fatalf("form %+v", e.sh.form)
+	}
+}
+
+// sqliteFile creates an empty file that passes the check of the form.
+func sqliteFile(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "notes.db")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestSQLiteFormShowsOnlyFileFields(t *testing.T) {
+	e := newEmptyEnv(t)
+	openNewSQLiteForm(t, e)
+	for _, want := range []string{"Name", "Folder", "File", "Browse…", "Open read-only", "Test connection", "Save"} {
+		if !e.tt.HasText(want) {
+			t.Errorf("the form lacks %q; texts %q", want, e.tt.Texts())
+		}
+	}
+	for _, not := range []string{"Host", "Port", "Username", "Password", "TLS", "Timeout (s)", "Database"} {
+		if e.tt.HasText(not) {
+			t.Errorf("the SQLite form shows %q", not)
+		}
+	}
+}
+
+func TestSQLiteFormSaveBuildsProfile(t *testing.T) {
+	e := newEmptyEnv(t)
+	openNewSQLiteForm(t, e)
+	path := sqliteFile(t)
+	fill(t, e.tt, "Name", "Notes")
+	e.sh.form.path = path
+	click(t, e.tt, "Open read-only")
+	click(t, e.tt, "Save")
+	if e.tt.HasText("New connection") {
+		t.Fatalf("the form stayed open; texts %q", e.tt.Texts())
+	}
+	p := e.profile("Notes")
+	if p.Driver != connection.DriverSQLite || p.SQLitePath != path || !p.ReadOnly || p.Host != "" || p.SecretRef != "" {
+		t.Errorf("saved %+v", p)
+	}
+}
+
+func TestSQLiteFormMissingFileShowsError(t *testing.T) {
+	e := newEmptyEnv(t)
+	openNewSQLiteForm(t, e)
+	fill(t, e.tt, "Name", "Notes")
+	click(t, e.tt, "Save")
+	if !e.tt.HasText("File is required") || len(e.sh.st.Catalog.Profiles) != 0 {
+		t.Errorf("texts %q", e.tt.Texts())
+	}
+	e.sh.form.path = filepath.Join(t.TempDir(), "absent.db")
+	click(t, e.tt, "Save")
+	if !e.tt.HasText("File not found") || len(e.sh.st.Catalog.Profiles) != 0 {
+		t.Errorf("texts %q", e.tt.Texts())
+	}
+}
+
+func TestSQLiteTestButtonUsesManagerTest(t *testing.T) {
+	e := newEmptyEnv(t)
+	openNewSQLiteForm(t, e)
+	path := sqliteFile(t)
+	fill(t, e.tt, "Name", "Notes")
+	e.sh.form.path = path
+	click(t, e.tt, "Test connection")
+	c := e.nextCall()
+	if c.profile.Driver != connection.DriverSQLite || c.profile.SQLitePath != path || c.password != "" {
+		t.Errorf("tested %+v with password %q", c.profile, c.password)
+	}
+	c.reply <- fakeReply{ad: &fakeAdapter{closed: make(chan struct{}, 1)}}
+	e.runPost()
+	if !e.tt.HasText("Connection succeeded") && !strings.Contains(e.sh.form.result, "Connection succeeded") {
+		t.Errorf("result %q", e.sh.form.result)
+	}
+}
+
+func TestBrowseSetsPathOnlyWhileFormOpen(t *testing.T) {
+	e := newEmptyEnv(t)
+	release := make(chan string)
+	e.sh.pickFile = func() (string, error) { return <-release, nil }
+
+	openNewSQLiteForm(t, e)
+	click(t, e.tt, "Browse…")
+	release <- "chosen.db"
+	e.runPost()
+	if e.sh.form.path != "chosen.db" || e.sh.form.browsing {
+		t.Errorf("path %q browsing %v", e.sh.form.path, e.sh.form.browsing)
+	}
+
+	// The form closes while the dialog is open: the answer is dropped.
+	f := e.sh.form
+	click(t, e.tt, "Browse…")
+	click(t, e.tt, "Cancel")
+	release <- "late.db"
+	e.runPost()
+	if e.sh.form != nil || f.path != "chosen.db" {
+		t.Errorf("form %v path %q", e.sh.form, f.path)
+	}
+}
+
+func TestEditSQLiteLoadsPathAndReadOnly(t *testing.T) {
+	e := newEmptyEnv(t)
+	path := sqliteFile(t)
+	if _, err := e.sh.st.Catalog.AddProfile(connection.Profile{Name: "Notes", Driver: connection.DriverSQLite, SQLitePath: path, ReadOnly: true}); err != nil {
+		t.Fatal(err)
+	}
+	e.tt.Frame()
+	e.tt.RightClick("Notes")
+	if err := e.tt.ChooseMenuItem("Edit…"); err != nil {
+		t.Fatal(err)
+	}
+	e.tt.Frame()
+	f := e.sh.form
+	if f == nil || f.driver != connection.DriverSQLite || f.step != stepFields || f.path != path || !f.readOnly {
+		t.Fatalf("form %+v", f)
+	}
+	if e.tt.HasText("Host") || !e.tt.HasText("File") {
+		t.Errorf("texts %q", e.tt.Texts())
+	}
+	click(t, e.tt, "Save")
+	if got := e.profile("Notes"); got.SQLitePath != path || !got.ReadOnly || got.Driver != connection.DriverSQLite {
+		t.Errorf("saved %+v", got)
 	}
 }

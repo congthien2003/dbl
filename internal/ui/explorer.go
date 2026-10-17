@@ -214,6 +214,10 @@ func (e *explorer) addDatabase(st *app.State, p connection.Profile) {
 		e.autoOpened[p.ID] = tree.Epoch
 		e.state.Open.Add(p.ID)
 		e.state.Open.Add(dbItem(p.ID))
+		if p.Driver == connection.DriverSQLite {
+			// A file has one schema, main: show its tables too.
+			e.state.Open.Add(schemaItem(p.ID, "main"))
+		}
 	}
 	db := dbItem(p.ID)
 	label := tree.Database

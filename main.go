@@ -1,5 +1,5 @@
 // Command dbl is SBDb, a desktop database manager built with MyGo's native
-// UI. It keeps connection profiles and opens PostgreSQL sessions.
+// UI. It keeps connection profiles and opens PostgreSQL and SQLite sessions.
 package main
 
 import (
@@ -17,7 +17,9 @@ import (
 
 	"dbl/internal/app"
 	"dbl/internal/connection"
+	"dbl/internal/database"
 	"dbl/internal/database/postgres"
+	"dbl/internal/database/sqlite"
 	"dbl/internal/storage"
 	dblui "dbl/internal/ui"
 )
@@ -113,6 +115,17 @@ func loadConnections(st *app.State, store *storage.ConnectionsStore) {
 	}
 }
 
+// connectDriver opens a session with the engine of the profile.
+func connectDriver(ctx context.Context, p connection.Profile, password string) (database.Adapter, error) {
+	switch p.Driver {
+	case connection.DriverPostgres:
+		return postgres.Connect(ctx, p, password)
+	case connection.DriverSQLite:
+		return sqlite.Connect(ctx, p, password)
+	}
+	return nil, &database.Error{Kind: database.KindUnsupported, Message: p.Driver.Label() + " connections are not supported yet"}
+}
+
 func main() {
 	// DBL takes every connection setting from its profiles, never from the
 	// libpq environment; this must run before any other goroutine starts.
@@ -150,7 +163,7 @@ func main() {
 		post(func() { st.SetCatalogSaveError(err) })
 	})
 	catSaver.OnSaved = func() { post(st.ClearCatalogSaveError) }
-	conns := connection.NewManager(&st.Catalog, storage.SystemCredentials{}, postgres.Connect, post)
+	conns := connection.NewManager(&st.Catalog, storage.SystemCredentials{}, connectDriver, post)
 	conns.OnCredentialIssue = st.ReportCredentialIssue
 	st.Conns = conns
 	st.Post = post

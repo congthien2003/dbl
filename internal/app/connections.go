@@ -181,6 +181,7 @@ func (s *State) RenameConnection(id, name string) error {
 func affectsSession(a, b connection.Profile, c connection.PasswordChange) bool {
 	return a.Host != b.Host || a.Port != b.Port || a.Database != b.Database || a.Username != b.Username ||
 		a.TLS != b.TLS || a.ConnectTimeoutSec != b.ConnectTimeoutSec || a.Pool != b.Pool ||
+		a.SQLitePath != b.SQLitePath || a.ReadOnly != b.ReadOnly ||
 		a.SecretRef != b.SecretRef || c.Mode == connection.RemovePassword ||
 		(c.Mode == connection.SetPassword && c.Value != "")
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egoist/mygo"
 	mygoui "github.com/egoist/mygo/ui"
 
 	"dbl/internal/connection"
@@ -38,16 +39,29 @@ const topLevel = "(top level)"
 // the padding, the title, the gaps, a result line and the buttons.
 const formChrome = 231
 
+// formStep is the page of the connection dialog.
+type formStep uint8
+
+const (
+	stepPickDriver formStep = iota // choose the database type (new connections)
+	stepFields                     // the fields of the chosen type
+)
+
 // connForm is the create/edit connection dialog. It holds what the user
 // typed as text; nothing reaches the catalog until Save succeeds. It never
 // holds the saved password: the field starts empty on every edit.
 type connForm struct {
 	editingID string // "" for a new connection
 	existing  connection.Profile
+	driver    connection.DriverType // chosen on the first step; fixed when editing
+	step      formStep
 	hasSecret bool // the connection has a saved password
 
 	name, host, port, database, user string
 	password, rootCert, timeout      string
+	path                             string // SQLite: the database file
+	readOnly                         bool   // SQLite: open the file read-only
+	browsing                         bool   // the file dialog is open
 	folder, tls                      string // the option shown
 	remove                           bool   // "Remove saved password"
 
@@ -78,9 +92,8 @@ func (sh *Shell) openConnForm(editID, folderID string) {
 		f.folderIDs = append(f.folderIDs, fo.ID)
 	}
 	if editID == "" {
-		f.port = strconv.Itoa(connection.DefaultPort)
-		f.timeout = strconv.Itoa(connection.DefaultConnectTimeoutSec)
-		f.tls = string(connection.DefaultTLSMode)
+		f.step = stepPickDriver
+		f.setDefaults()
 		f.setFolder(folderID)
 		sh.form = f
 		return
@@ -90,12 +103,38 @@ func (sh *Shell) openConnForm(editID, folderID string) {
 		return
 	}
 	f.editingID, f.existing, f.hasSecret = editID, p, p.SecretRef != ""
+	f.driver, f.step = p.Driver, stepFields
 	f.name, f.host, f.port = p.Name, p.Host, strconv.Itoa(p.Port)
 	f.database, f.user = p.Database, p.Username
 	f.timeout = strconv.Itoa(p.ConnectTimeoutSec)
 	f.tls, f.rootCert = string(p.TLS.Mode), p.TLS.RootCert
+	f.path, f.readOnly = p.SQLitePath, p.ReadOnly
 	f.setFolder(p.FolderID)
 	sh.form = f
+}
+
+// setDefaults gives the fields of the chosen type the values of a new
+// connection. The name and the folder are the user's whatever the type.
+func (f *connForm) setDefaults() {
+	f.host, f.port, f.database, f.user = "", strconv.Itoa(connection.DefaultPort), "", ""
+	f.password, f.rootCert, f.remove = "", "", false
+	f.path, f.readOnly = "", false
+	f.timeout = strconv.Itoa(connection.DefaultConnectTimeoutSec)
+	f.tls = string(connection.DefaultTLSMode)
+	f.errs, f.general, f.result = map[string]string{}, "", ""
+}
+
+// chooseDriver moves a new connection to the fields of d. Choosing the type
+// the form already had keeps what was typed; another type starts from its
+// defaults.
+func (f *connForm) chooseDriver(d connection.DriverType) {
+	if f.driver != d {
+		if f.driver != "" {
+			f.setDefaults()
+		}
+		f.driver = d
+	}
+	f.step = stepFields
 }
 
 func (f *connForm) setFolder(id string) {
@@ -120,6 +159,13 @@ func (f *connForm) folderID() string {
 // are reported in errs.
 func (f *connForm) profile() (connection.Profile, connection.PasswordChange, map[string]string) {
 	errs := map[string]string{}
+	if f.driver == connection.DriverSQLite {
+		// A file has no port, timeout or password to parse.
+		return connection.Profile{
+			ID: f.editingID, Name: f.name, FolderID: f.folderID(), Driver: f.driver,
+			SQLitePath: f.path, ReadOnly: f.readOnly,
+		}, connection.PasswordChange{}, errs
+	}
 	port, err := strconv.Atoi(strings.TrimSpace(f.port))
 	if err != nil {
 		errs[connection.FieldPort] = "Port must be a number"
@@ -130,14 +176,11 @@ func (f *connForm) profile() (connection.Profile, connection.PasswordChange, map
 	}
 	p := connection.Profile{
 		ID: f.editingID, Name: f.name, FolderID: f.folderID(),
-		Driver: connection.DriverPostgres,
+		Driver: f.driver,
 		Host:   f.host, Port: port, Database: f.database, Username: f.user,
 		TLS:               connection.TLSOptions{Mode: connection.TLSMode(f.tls)},
 		ConnectTimeoutSec: timeout,
 		Pool:              f.existing.Pool,
-	}
-	if f.editingID != "" {
-		p.Driver = f.existing.Driver
 	}
 	if p.TLS.Mode.Verifies() {
 		p.TLS.RootCert = f.rootCert
@@ -247,7 +290,9 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 		title = "Edit connection"
 	}
 	open := true
-	var save, test, cancelTest bool
+	var save, test, cancelTest, back bool
+	var picked connection.DriverType
+	var didPick bool
 	// The dialog is at most 80 DIPs shorter than the window; its title,
 	// padding, gaps, result line and buttons take the rest, and the fields
 	// scroll in what remains.
@@ -255,6 +300,16 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 	mygoui.Modal(c, &open, func() {
 		mygoui.Column(c).Width(560).Padding(20).Gap(12).Children(func() {
 			mygoui.Text(c, title).FontSize(16).Bold()
+			if f.step == stepPickDriver {
+				picked, didPick = sh.driverPickerView(c, t, f)
+				mygoui.Row(c).Gap(8).AlignItems(mygoui.Center).Children(func() {
+					mygoui.Box(c).Grow(1)
+					if sh.fade(mygoui.Button(c, "Cancel")).Clicked() {
+						open = false
+					}
+				})
+				return
+			}
 			mygoui.Scroll(c).MaxHeight(scrollMax).Children(func() {
 				mygoui.Form(c, func() {
 					submitOn := func(e mygoui.Element) {
@@ -269,9 +324,13 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 						mygoui.Select(c, &f.folder, f.folderLabels)
 					})
 					mygoui.Field(c, "Driver", func() {
-						driver := connection.DriverPostgres.Label()
+						driver := f.driver.Label()
 						mygoui.Select(c, &driver, []string{driver}).Disabled(true)
 					}).Error(f.errs[connection.FieldDriver])
+					if f.driver == connection.DriverSQLite {
+						sh.sqliteFields(c, t, f, submitOn)
+						return
+					}
 					mygoui.Field(c, "Host", func() {
 						submitOn(mygoui.TextInput(c, &f.host).Placeholder("localhost"))
 					}).Error(f.errs[connection.FieldHost])
@@ -321,6 +380,11 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 				mygoui.Text(c, f.result).TextColor(color)
 			}
 			mygoui.Row(c).Gap(8).AlignItems(mygoui.Center).Children(func() {
+				if f.editingID == "" && !f.testing {
+					if sh.fade(mygoui.Button(c, "Back")).Clicked() {
+						back = true
+					}
+				}
 				if f.testing {
 					if sh.fade(mygoui.Button(c, "Cancel test")).Clicked() {
 						cancelTest = true
@@ -342,6 +406,12 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 	case !open:
 		sh.closeConnForm()
 		c.Invalidate()
+	case didPick:
+		f.chooseDriver(picked)
+		c.Invalidate()
+	case back:
+		f.step = stepPickDriver
+		c.Invalidate()
 	case cancelTest:
 		if f.cancelTest != nil {
 			f.cancelTest()
@@ -355,6 +425,76 @@ func (sh *Shell) connFormView(c *mygoui.Context, t *mygoui.Theme) {
 		sh.saveConnForm(f)
 		c.Invalidate()
 	}
+}
+
+// sqliteFields are the fields of a SQLite connection after the common ones:
+// the database file and whether to open it read-only.
+func (sh *Shell) sqliteFields(c *mygoui.Context, t *mygoui.Theme, f *connForm, submitOn func(mygoui.Element)) {
+	mygoui.Field(c, "File", func() {
+		mygoui.Row(c).Gap(8).AlignItems(mygoui.Center).Children(func() {
+			submitOn(mygoui.TextInput(c, &f.path).Placeholder("Path to a SQLite database file").Grow(1))
+			if sh.fade(mygoui.Button(c, "Browse…")).Disabled(f.browsing).Clicked() {
+				sh.browseSQLitePath(f)
+			}
+		})
+	}).Description("The file must already exist; it is never created.").Error(f.errs[connection.FieldPath])
+	mygoui.Field(c, "", func() {
+		mygoui.Checkbox(c, &f.readOnly, "Open read-only")
+	})
+}
+
+// sqliteFilters are the file types the Browse dialog offers.
+var sqliteFilters = []mygo.FileFilter{
+	{Name: "SQLite (*.db, *.sqlite, *.sqlite3)", Extensions: []string{"db", "sqlite", "sqlite3"}},
+	{Name: "All files", Extensions: []string{"*"}},
+}
+
+// pickSQLiteFile asks the user for a database file. It blocks, so it runs
+// on a worker.
+func (sh *Shell) pickSQLiteFile() (string, error) {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: sh.win, Title: "Choose a SQLite database", Filters: sqliteFilters})
+	if err != nil || len(paths) == 0 {
+		return "", err
+	}
+	return paths[0], nil
+}
+
+// browseSQLitePath opens the file dialog off the UI thread and puts the
+// chosen file in the form, if the form is still the one that asked.
+func (sh *Shell) browseSQLitePath(f *connForm) {
+	if f.browsing {
+		return
+	}
+	f.browsing = true
+	pick := sh.pickFile
+	if pick == nil {
+		pick = sh.pickSQLiteFile
+	}
+	go func() {
+		path, err := pick()
+		sh.postUI(func() {
+			f.browsing = false
+			if sh.form != f {
+				return
+			}
+			switch {
+			case err != nil:
+				f.general = "The file dialog failed: " + err.Error()
+			case path != "":
+				f.path = path
+				delete(f.errs, connection.FieldPath)
+			}
+		})
+	}()
+}
+
+// postUI runs fn on the UI thread.
+func (sh *Shell) postUI(fn func()) {
+	if sh.st.Post != nil {
+		sh.st.Post(fn)
+		return
+	}
+	sh.st.Conns.Post(fn)
 }
 
 func passwordPlaceholder(f *connForm) string {

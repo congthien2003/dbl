@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SBDb — A lightweight, native database client</title>
+  <meta name="description" content="SBDb is a lightweight desktop database client built with Go and native UI. Manage connections, explore schemas, inspect tables, edit data safely, and run SQL in one focused workspace.">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+      --color-brand-50: #eff6ff;
+      --color-brand-100: #dbeafe;
+      --color-brand-400: #60a5fa;
+      --color-brand-500: #3b82f6;
+      --color-brand-600: #2563eb;
+      --color-brand-700: #1d4ed8;
+      --color-accent-400: #2dd4bf;
+      --color-accent-500: #14b8a6;
+    }
+  </style>
+  <style>
+    html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+    .reveal { transition: opacity .6s ease, transform .6s ease; }
+    .js .reveal:not(.is-visible) { opacity: 0; transform: translateY(12px); }
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] .faq-chevron { transform: rotate(180deg); }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .reveal, .faq-chevron { transition: none !important; }
+      .js .reveal:not(.is-visible) { opacity: 1; transform: none; }
+    }
+  </style>
+  <script>document.documentElement.classList.add('js');</script>
+</head>
+<body class="bg-white font-sans text-slate-700 antialiased dark:bg-slate-950 dark:text-slate-300">
+  <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-white">Skip to content</a>
+
+  <!-- Navigation -->
+  <header class="sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85">
+    <nav class="mx-auto flex max-w-[1100px] items-center justify-between px-4 py-3 sm:px-6" aria-label="Primary">
+      <a href="#top" class="flex items-center gap-2 rounded-md font-semibold text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500 dark:text-white">
+        <span class="grid size-8 place-items-center rounded-lg bg-brand-600 text-white">
+          <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 11.4v2.17c0 .85 3.1 2.86 8 2.86s8-2.01 8-2.86V11.4c-1.86 1.21-4.81 2.03-8 2.03s-6.14-.82-8-2.03"/><path d="M4 16.4V18c0 2.17 3.66 4 8 4s8-1.83 8-4v-1.6c-1.86 1.21-4.81 2.03-8 2.03s-6.14-.82-8-2.03M12 2C7.66 2 4 3.83 4 6v2.57c0 .85 3.1 2.86 8 2.86s8-2.01 8-2.86V6c0-2.17-3.66-4-8-4"/></svg>
+        </span>
+        SBDb
+      </a>
+
+      <div class="hidden items-center gap-7 text-sm font-medium md:flex">
+        <a class="rounded hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500 dark:hover:text-brand-400" href="#features">Features</a>
+        <a class="rounded hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500 dark:hover:text-brand-400" href="#how-it-works">How it works</a>
+        <a class="rounded hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500 dark:hover:text-brand-400" href="#databases">Databases</a>
+        <a class="rounded hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500 dark:hover:text-brand-400" href="#faq">FAQ</a>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <a href="https://github.com/congthien2003/dbl" class="hidden items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 sm:inline-flex dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">
+          <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5"/></svg>
+          View on GitHub
+        </a>
+        <button id="menu-toggle" type="button" class="inline-flex size-10 items-center justify-center rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 md:hidden dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open menu">
+          <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </nav>
+    <div id="mobile-menu" class="hidden border-t border-slate-200 px-4 pb-4 md:hidden dark:border-slate-800">
+      <ul class="flex flex-col pt-2 text-base font-medium">
+        <li><a class="block rounded-md px-2 py-2.5 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-brand-500 dark:hover:bg-slate-800" href="#features">Features</a></li>
+        <li><a class="block rounded-md px-2 py-2.5 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-brand-500 dark:hover:bg-slate-800" href="#how-it-works">How it works</a></li>
+        <li><a class="block rounded-md px-2 py-2.5 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-brand-500 dark:hover:bg-slate-800" href="#databases">Databases</a></li>
+        <li><a class="block rounded-md px-2 py-2.5 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-brand-500 dark:hover:bg-slate-800" href="#faq">FAQ</a></li>
+        <li class="pt-2"><a class="block rounded-lg bg-slate-900 px-4 py-2.5 text-center font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:bg-white dark:text-slate-900" href="https://github.com/congthien2003/dbl">View on GitHub</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section id="top" class="relative overflow-hidden">
+      <div class="pointer-events-none absolute inset-x-0 -top-40 -z-10 h-[520px] bg-[radial-gradient(60%_60%_at_70%_20%,rgba(59,130,246,.18),transparent),radial-gradient(40%_50%_at_10%_40%,rgba(20,184,166,.12),transparent)]" aria-hidden="true"></div>
+      <div class="mx-auto grid max-w-[1100px] items-center gap-12 px-4 pb-16 pt-14 sm:px-6 md:pt-20 lg:grid-cols-[1fr_1.1fr] lg:pb-24">
+        <div>
+          <p class="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700 dark:border-brand-700/40 dark:bg-brand-700/15 dark:text-brand-400">
+            <span class="size-1.5 rounded-full bg-accent-500" aria-hidden="true"></span>
+            Minimal · Fast · Native
+          </p>
+          <h1 class="mt-5 text-4xl font-bold leading-[1.1] tracking-tight text-slate-900 sm:text-5xl dark:text-white">
+            A lightweight, native <span class="text-brand-600 dark:text-brand-400">database client</span>.
+          </h1>
+          <p class="mt-5 max-w-xl text-lg leading-relaxed text-slate-600 dark:text-slate-400">
+            SBDb brings connection management, database exploration, table inspection and data editing into one focused desktop workspace. Built with Go and a native UI for the everyday database work you do most.
+          </p>
+          <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+            <a href="https://github.com/congthien2003/dbl" class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-3 font-semibold text-white shadow-sm shadow-brand-600/30 transition hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500">
+              <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5"/></svg>
+              View on GitHub
+            </a>
+            <a href="#get-started" class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
+              Get started
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+            </a>
+          </div>
+          <ul class="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-500 dark:text-slate-400">
+            <li class="flex items-center gap-2"><svg class="size-4 text-accent-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Native UI, no embedded browser</li>
+            <li class="flex items-center gap-2"><svg class="size-4 text-accent-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>PostgreSQL first</li>
+            <li class="flex items-center gap-2"><svg class="size-4 text-accent-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>Local-first</li>
+          </ul>
+        </div>
+
+        <!-- Illustration of the two-panel workspace (not a screenshot) -->
+        <figure class="reveal">
+          <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/40">
+            <div class="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
+              <span class="size-2.5 rounded-full bg-slate-300 dark:bg-slate-700" aria-hidden="true"></span>
+              <span class="size-2.5 rounded-full bg-slate-300 dark:bg-slate-700" aria-hidden="true"></span>
+              <span class="size-2.5 rounded-full bg-slate-300 dark:bg-slate-700" aria-hidden="true"></span>
+              <span class="ml-2 text-xs font-semibold text-slate-500">SBDb</span>
+            </div>
+            <div class="grid grid-cols-[120px_1fr] text-[11px] sm:grid-cols-[150px_1fr] sm:text-xs" aria-hidden="true">
+              <div class="border-r border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+                <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Connections</p>
+                <ul class="space-y-1.5 text-slate-600 dark:text-slate-400">
+                  <li>▾ Work</li>
+                  <li class="pl-3">▾ Local PG</li>
+                  <li class="pl-6">▾ public</li>
+                  <li class="pl-9"><span class="rounded bg-brand-100 px-1 font-medium text-brand-700 dark:bg-brand-700/30 dark:text-brand-400">users</span></li>
+                  <li class="pl-9">orders</li>
+                  <li>▸ Personal</li>
+                </ul>
+              </div>
+              <div class="min-w-0">
+                <div class="flex gap-1 border-b border-slate-200 px-2 pt-2 dark:border-slate-800">
+                  <span class="rounded-t-md border border-b-0 border-slate-200 bg-white px-2 py-1 font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">users</span>
+                  <span class="px-2 py-1 text-slate-400">orders</span>
+                  <span class="truncate px-2 py-1 text-slate-400">query.sql</span>
+                </div>
+                <div class="p-3">
+                  <div class="mb-2 flex items-center gap-2">
+                    <span class="font-semibold text-slate-800 dark:text-slate-100">public.users</span>
+                    <span class="ml-auto rounded border border-slate-200 px-1.5 py-0.5 text-slate-500 dark:border-slate-700">Data</span>
+                    <span class="rounded px-1.5 py-0.5 text-slate-400">Properties</span>
+                  </div>
+                  <div class="mb-2 rounded border border-slate-200 px-2 py-1 text-slate-400 dark:border-slate-700">Filter: email contains…</div>
+                  <table class="w-full table-fixed border-collapse">
+                    <thead><tr class="bg-slate-100 text-left text-slate-500 dark:bg-slate-800"><th class="w-8 px-2 py-1 font-semibold">id</th><th class="px-2 py-1 font-semibold">name</th><th class="hidden px-2 py-1 font-semibold sm:table-cell">email</th></tr></thead>
+                    <tbody class="text-slate-600 dark:text-slate-300">
+                      <tr class="border-b border-slate-100 dark:border-slate-800"><td class="px-2 py-1">1</td><td class="px-2 py-1">Sabo</td><td class="hidden truncate px-2 py-1 sm:table-cell">sabo@example.com</td></tr>
+                      <tr class="border-b border-slate-100 dark:border-slate-800"><td class="px-2 py-1">2</td><td class="px-2 py-1"><span class="rounded bg-amber-100 px-1 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">Alice M.</span></td><td class="hidden truncate px-2 py-1 sm:table-cell">alice@example.com</td></tr>
+                      <tr class="border-b border-slate-100 dark:border-slate-800"><td class="px-2 py-1">3</td><td class="px-2 py-1">Bao</td><td class="hidden truncate px-2 py-1 italic text-slate-400 sm:table-cell">NULL</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="mt-3 flex items-center gap-2">
+                    <span class="rounded border border-slate-200 px-2 py-1 text-slate-500 dark:border-slate-700">Revert</span>
+                    <span class="rounded bg-brand-600 px-2 py-1 font-medium text-white">Save changes</span>
+                    <span class="ml-auto text-slate-400">Rows 1–100</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption class="mt-3 text-center text-xs text-slate-400">Illustration of the SBDb workspace layout: explorer, tabs, data grid with a staged edit.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- Why SBDb -->
+    <section id="why" class="border-y border-slate-200 bg-slate-50 py-20 dark:border-slate-800 dark:bg-slate-900/50">
+      <div class="mx-auto grid max-w-[1100px] gap-12 px-4 sm:px-6 lg:grid-cols-[1fr_1.3fr]">
+        <div class="reveal">
+          <p class="text-sm font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">Why SBDb</p>
+          <h2 class="mt-3 text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Everyday database work, without the heavyweight IDE.</h2>
+          <p class="mt-4 leading-relaxed text-slate-600 dark:text-slate-400">
+            Most days you connect, browse a schema, check a table, fix a few values and run some SQL. SBDb is inspired by familiar DBeaver workflows, but it focuses only on those tasks and keeps a small memory footprint and a clean interface.
+          </p>
+        </div>
+        <ul class="reveal grid gap-6 sm:grid-cols-2">
+          <li>
+            <h3 class="font-semibold text-slate-900 dark:text-white">Native desktop UI</h3>
+            <p class="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Built with Go and MyGo Native UI. No embedded browser powers the interface.</p>
+          </li>
+          <li>
+            <h3 class="font-semibold text-slate-900 dark:text-white">Loads data as needed</h3>
+            <p class="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Paginated table reads with 100 rows per page by default and a bounded page cache.</p>
+          </li>
+          <li>
+            <h3 class="font-semibold text-slate-900 dark:text-white">Connects on demand</h3>
+            <p class="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Startup only loads local configuration. Database connections open when you ask for them.</p>
+          </li>
+          <li>
+            <h3 class="font-semibold text-slate-900 dark:text-white">Stays responsive</h3>
+            <p class="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Database operations run outside the UI rendering path, so the window keeps working while queries run.</p>
+          </li>
+          <li class="sm:col-span-2">
+            <h3 class="font-semibold text-slate-900 dark:text-white">Stays local</h3>
+            <p class="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Settings and connection profiles live on your machine. Passwords go to the operating system credential store, never into plaintext JSON.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="py-20">
+      <div class="mx-auto max-w-[1100px] px-4 sm:px-6">
+        <div class="reveal max-w-2xl">
+          <p class="text-sm font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">Features</p>
+          <h2 class="mt-3 text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Everything for the core workflow, nothing you don't need.</h2>
+        </div>
+        <div class="reveal mt-12 grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-3 dark:border-slate-800 dark:bg-slate-800">
+          <article class="bg-white p-6 dark:bg-slate-950">
+            <span class="grid size-10 place-items-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-700/20 dark:text-brand-400"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+            <h3 class="mt-4 font-semibold text-slate-900 dark:text-white">Connection management</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Saved profiles organized in folders, connection testing, TLS options, and connect or disconnect whenever you need.</p>
+          </article>
+          <article class="bg-white p-6 dark:bg-slate-950">
+            <span class="grid size-10 place-items-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-700/20 dark:text-brand-400"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6v6H4zM14 14h6v6h-6zM7 10v4a3 3 0 0 0 3 3h4"/></svg></span>
+            <h3 class="mt-4 font-semibold text-slate-900 dark:text-white">Database explorer</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Browse the connected database, schemas, tables and views. Metadata loads lazily as you expand the tree.</p>
+          </article>
+          <article class="bg-white p-6 dark:bg-slate-950">
+            <span class="grid size-10 place-items-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-700/20 dark:text-brand-400"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.35-4.35"/></svg></span>
+            <h3 class="mt-4 font-semibold text-slate-900 dark:text-white">Table Inspector</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">See data next to columns, constraints, foreign keys, indexes and triggers in one tab.</p>
+          </article>
+          <article class="bg-white p-6 dark:bg-slate-950">
+            <span class="grid size-10 place-items-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-700/20 dark:text-brand-400"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg></span>
+            <h3 class="mt-4 font-semibold text-slate-900 dark:text-white">Fast data grid</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Virtualized rows, server-side pagination, sorting, and a column filter that runs on the database server.</p>
+          </article>
+          <article class="bg-white p-6 dark:bg-slate-950">
+            <span class="grid size-10 place-items-center rounded-lg bg-accent-400/15 text-accent-500"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></span>
+            <h3 class="mt-4 font-semibold text-slate-900 dark:text-white">Safe, explicit editing</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Stage cell edits locally, then Save or Revert. Saves run in a transaction and check for conflicting changes. Views and tables without a reliable row identity stay read-only.</p>
+          </article>
+          <article class="bg-white p-6 dark:bg-slate-950">
+            <span class="grid size-10 place-items-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-700/20 dark:text-brand-400"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg></span>
+            <h3 class="mt-4 font-semibold text-slate-900 dark:text-white">SQL workspace &amp; files</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Syntax highlighting, line numbers, a separate session per tab, run the selection or current statement, cancel anytime. Open and save local <code class="font-mono text-[0.85em]">.sql</code> files safely.</p>
+          </article>
+        </div>
+        <p class="reveal mt-6 text-sm text-slate-500 dark:text-slate-400">Plus tabbed workspaces, Light, Dark and System themes, and a remembered window size and sidebar width.</p>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section id="how-it-works" class="border-y border-slate-200 bg-slate-50 py-20 dark:border-slate-800 dark:bg-slate-900/50">
+      <div class="mx-auto max-w-[1100px] px-4 sm:px-6">
+        <div class="reveal max-w-2xl">
+          <p class="text-sm font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">How it works</p>
+          <h2 class="mt-3 text-3xl font-bold tracking-tight text-slate-900 dark:text-white">From connection to saved change in three steps.</h2>
+        </div>
+        <ol class="reveal mt-12 grid gap-8 md:grid-cols-3">
+          <li class="relative border-l-2 border-brand-500 pl-5">
+            <span class="text-sm font-bold text-brand-600 dark:text-brand-400">01</span>
+            <h3 class="mt-1 text-lg font-semibold text-slate-900 dark:text-white">Add a connection</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Create a PostgreSQL profile, test it, and keep it in a folder. The password goes to your OS credential store.</p>
+          </li>
+          <li class="relative border-l-2 border-brand-500 pl-5">
+            <span class="text-sm font-bold text-brand-600 dark:text-brand-400">02</span>
+            <h3 class="mt-1 text-lg font-semibold text-slate-900 dark:text-white">Browse &amp; inspect</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Expand schemas in the explorer and open a table to see its data and structure side by side.</p>
+          </li>
+          <li class="relative border-l-2 border-accent-500 pl-5">
+            <span class="text-sm font-bold text-accent-500">03</span>
+            <h3 class="mt-1 text-lg font-semibold text-slate-900 dark:text-white">Edit or query, then save</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Stage edits in the grid and save them in one transaction, or open a SQL tab and run with <kbd class="rounded border border-slate-300 bg-white px-1 font-mono text-[0.8em] dark:border-slate-600 dark:bg-slate-800">Ctrl</kbd>+<kbd class="rounded border border-slate-300 bg-white px-1 font-mono text-[0.8em] dark:border-slate-600 dark:bg-slate-800">Enter</kbd>.</p>
+          </li>
+        </ol>
+
+        <div id="get-started" class="reveal mt-16 grid items-center gap-8 rounded-xl border border-slate-200 bg-white p-6 sm:p-8 lg:grid-cols-[1fr_1.2fr] dark:border-slate-800 dark:bg-slate-950">
+          <div>
+            <h3 class="text-xl font-semibold text-slate-900 dark:text-white">Run from source</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">Install the Go toolchain declared in the project's <code class="font-mono text-[0.85em]">go.mod</code> (currently Go 1.27.2), clone the repository, and launch the app from its root. You only need a PostgreSQL server to browse real data, not to open the app.</p>
+          </div>
+          <div class="min-w-0">
+            <pre class="overflow-x-auto rounded-lg bg-slate-900 p-4 font-mono text-sm leading-relaxed text-slate-100"><code><span class="text-slate-500"># clone and run</span>
+git clone https://github.com/congthien2003/dbl.git
+cd dbl
+go run .</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Databases -->
+    <section id="databases" class="py-20">
+      <div class="mx-auto grid max-w-[1100px] gap-12 px-4 sm:px-6 lg:grid-cols-[1fr_1.2fr]">
+        <div class="reveal">
+          <p class="text-sm font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">Databases</p>
+          <h2 class="mt-3 text-3xl font-bold tracking-tight text-slate-900 dark:text-white">PostgreSQL first. More engines on the way.</h2>
+          <p class="mt-4 leading-relaxed text-slate-600 dark:text-slate-400">SBDb is under active development. PostgreSQL is supported today, and other engines are planned, each with its own database-specific behavior.</p>
+          <p class="mt-4 text-sm text-slate-500 dark:text-slate-400"><strong class="font-semibold text-slate-700 dark:text-slate-300">Platforms:</strong> Windows 10/11 x64 is the primary target. macOS and Linux are secondary targets.</p>
+        </div>
+        <div class="reveal overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+          <table class="w-full min-w-[420px] text-left text-sm">
+            <caption class="sr-only">Database support status</caption>
+            <thead class="bg-slate-50 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              <tr><th scope="col" class="px-5 py-3 font-semibold">Database</th><th scope="col" class="px-5 py-3 font-semibold">Status</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+              <tr>
+                <th scope="row" class="px-5 py-4 font-medium text-slate-900 dark:text-white">PostgreSQL 12+</th>
+                <td class="px-5 py-4"><span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"><span class="size-1.5 rounded-full bg-emerald-500" aria-hidden="true"></span>Available</span></td>
+              </tr>
+              <tr>
+                <th scope="row" class="px-5 py-4 font-medium text-slate-900 dark:text-white">MySQL / MariaDB</th>
+                <td class="px-5 py-4"><span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Planned</span></td>
+              </tr>
+              <tr>
+                <th scope="row" class="px-5 py-4 font-medium text-slate-900 dark:text-white">SQLite</th>
+                <td class="px-5 py-4"><span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Planned</span></td>
+              </tr>
+              <tr>
+                <th scope="row" class="px-5 py-4 font-medium text-slate-900 dark:text-white">Microsoft SQL Server</th>
+                <td class="px-5 py-4"><span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Planned</span></td>
+              </tr>
+              <tr>
+                <th scope="row" class="px-5 py-4 font-medium text-slate-900 dark:text-white">Redis</th>
+                <td class="px-5 py-4"><span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Planned</span> <span class="ml-1 text-xs text-slate-500">key/value explorer</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="border-t border-slate-200 bg-slate-50 py-20 dark:border-slate-800 dark:bg-slate-900/50">
+      <div class="mx-auto max-w-3xl px-4 sm:px-6">
+        <div class="reveal text-center">
+          <p class="text-sm font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">FAQ</p>
+          <h2 class="mt-3 text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Questions, answered.</h2>
+        </div>
+        <div class="reveal mt-10 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-950">
+          <details class="group px-5">
+            <summary class="flex cursor-pointer items-center justify-between gap-4 rounded py-4 font-medium text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:text-white">Is SBDb a full DBeaver replacement?<svg class="faq-chevron size-5 shrink-0 text-slate-400 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+            <p class="pb-5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">No. It follows familiar DBeaver workflows but only covers the tasks used most often: connections, navigation, table inspection, data viewing and editing, SQL execution, and local SQL files.</p>
+          </details>
+          <details class="group px-5">
+            <summary class="flex cursor-pointer items-center justify-between gap-4 rounded py-4 font-medium text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:text-white">Where are my passwords stored?<svg class="faq-chevron size-5 shrink-0 text-slate-400 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+            <p class="pb-5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">In your operating system's credential store. Connection profiles in <code class="font-mono text-[0.85em]">~/.dbl/</code> never contain plaintext passwords. If secure storage isn't available, SBDb asks for the password for the current session instead of saving it.</p>
+          </details>
+          <details class="group px-5">
+            <summary class="flex cursor-pointer items-center justify-between gap-4 rounded py-4 font-medium text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:text-white">Does it use an embedded browser like Electron?<svg class="faq-chevron size-5 shrink-0 text-slate-400 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+            <p class="pb-5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">No. The interface is built with Go and MyGo Native UI, without an embedded browser.</p>
+          </details>
+          <details class="group px-5">
+            <summary class="flex cursor-pointer items-center justify-between gap-4 rounded py-4 font-medium text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:text-white">Will my edits be written immediately?<svg class="faq-chevron size-5 shrink-0 text-slate-400 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+            <p class="pb-5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">No. Edits are staged locally until you choose Save, which applies them in a transaction and checks for conflicting changes. If a save fails, your pending edits are kept.</p>
+          </details>
+          <details class="group px-5">
+            <summary class="flex cursor-pointer items-center justify-between gap-4 rounded py-4 font-medium text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:text-white">Is it ready for daily use?<svg class="faq-chevron size-5 shrink-0 text-slate-400 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+            <p class="pb-5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">SBDb is under active development. The PostgreSQL workflow is implemented; other engines, platform validation and distribution packages are on the roadmap. Today you run it from source.</p>
+          </details>
+          <details class="group px-5">
+            <summary class="flex cursor-pointer items-center justify-between gap-4 rounded py-4 font-medium text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:text-white">What is intentionally left out?<svg class="faq-chevron size-5 shrink-0 text-slate-400 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+            <p class="pb-5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">To stay small, the initial scope excludes visual query builders, ER diagrams, migration management, backup and restore, import/export, and AI-assisted SQL.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Closing CTA -->
+    <section class="py-20">
+      <div class="mx-auto max-w-[1100px] px-4 sm:px-6">
+        <div class="reveal relative overflow-hidden rounded-2xl bg-slate-900 px-6 py-14 text-center sm:px-12 dark:bg-slate-900 dark:ring-1 dark:ring-slate-800">
+          <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_80%_at_50%_0%,rgba(59,130,246,.35),transparent)]" aria-hidden="true"></div>
+          <h2 class="relative text-3xl font-bold tracking-tight text-white">Do a few database tasks, exceptionally well.</h2>
+          <p class="relative mx-auto mt-4 max-w-xl text-slate-300">Follow SBDb's progress, read the docs, and try it from source on GitHub.</p>
+          <a href="https://github.com/congthien2003/dbl" class="relative mt-8 inline-flex items-center gap-2 rounded-lg bg-white px-6 py-3 font-semibold text-slate-900 transition hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+            <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5"/></svg>
+            View on GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-slate-200 py-10 dark:border-slate-800">
+    <div class="mx-auto flex max-w-[1100px] flex-col items-center justify-between gap-4 px-4 text-sm text-slate-500 sm:flex-row sm:px-6 dark:text-slate-400">
+      <p class="flex items-center gap-2"><span class="font-semibold text-slate-800 dark:text-slate-200">SBDb</span> · Built with Go and MyGo Native UI</p>
+      <ul class="flex gap-6">
+        <li><a class="rounded hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500 dark:hover:text-brand-400" href="https://github.com/congthien2003/dbl">GitHub</a></li>
+        <li><a class="rounded hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500 dark:hover:text-brand-400" href="https://github.com/congthien2003/dbl/blob/main/docs/specs.md">Specification</a></li>
+        <li><a class="rounded hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500 dark:hover:text-brand-400" href="#top">Back to top</a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var toggle = document.getElementById('menu-toggle');
+      var menu = document.getElementById('mobile-menu');
+      function setOpen(open) {
+        menu.classList.toggle('hidden', !open);
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      }
+      toggle.addEventListener('click', function () { setOpen(menu.classList.contains('hidden')); });
+      menu.addEventListener('click', function (e) { if (e.target.closest('a')) setOpen(false); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !menu.classList.contains('hidden')) { setOpen(false); toggle.focus(); }
+      });
+
+      var items = document.querySelectorAll('.reveal');
+      if (!('IntersectionObserver' in window)) {
+        items.forEach(function (el) { el.classList.add('is-visible'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) { entry.target.classList.add('is-visible'); io.unobserve(entry.target); }
+        });
+      }, { rootMargin: '0px 0px -10% 0px' });
+      items.forEach(function (el) { io.observe(el); });
+    })();
+  </script>
+</body>
+</html>

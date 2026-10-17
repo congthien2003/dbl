@@ -146,6 +146,9 @@ type ColumnMetadata struct {
 	Unique     bool // member of a unique constraint
 	Identity   IdentityKind
 	Generated  bool // computed by the server, never written
+	// IntBits is the width of an integer column, 0 when it is not known
+	// from the native type's name (SQLite's INTEGER is 64 bits).
+	IntBits int
 }
 
 // SectionState says why a section of metadata has the items it has. An
@@ -300,6 +303,9 @@ type TableMetadata struct {
 	EstimatedRows int64
 	// Identity is set by ResolveIdentity.
 	Identity RowIdentity
+	// ReadOnly, when not empty, is why the connection forbids writing to
+	// the table, whatever its keys.
+	ReadOnly string
 }
 
 // Column returns the column with the given name.
@@ -329,6 +335,9 @@ func (m *TableMetadata) ColumnIndex(name string) int {
 func (m *TableMetadata) Editable() (bool, string) {
 	if m.Kind == ObjectView {
 		return false, "Views are read-only."
+	}
+	if m.ReadOnly != "" {
+		return false, m.ReadOnly
 	}
 	if !m.Identity.Known() {
 		if m.Identity.Reason != "" {

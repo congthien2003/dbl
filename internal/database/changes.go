@@ -190,6 +190,9 @@ func baseType(native string) string {
 }
 
 func checkNumber(c ColumnMetadata, text string) string {
+	if c.IntBits > 0 {
+		return checkInt(text, c.IntBits)
+	}
 	switch baseType(c.NativeType) {
 	case "smallint", "int2":
 		return checkInt(text, 16)
