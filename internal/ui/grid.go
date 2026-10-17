@@ -266,10 +266,7 @@ func (g *gridView) build(c *mygoui.Context, st *app.State, tab *app.Tab, p Palet
 func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, col int) {
 	t := c.Theme()
 	pos := cellPos{row, col}
-	if g.edit != nil && g.edit.pos == pos {
-		g.buildEditor(c, tab)
-		return
-	}
+	editing := g.edit != nil && g.edit.pos == pos
 	v, dirty := g.value(tab, row, col)
 	rowErr := ""
 	if tab.Data != nil && dirty {
@@ -287,32 +284,47 @@ func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, co
 		g.next[col] = r.X + r.W + padX
 		g.nextLeft[col] = r.X - padX
 	}
-	// A faint line below and to the right of the cell, over its whole
-	// padded area so neighbours join into rules.
+	var background mygoui.Color
+	switch {
+	case rowErr != "":
+		background = p.Error
+		box.Tooltip(rowErr)
+	case dirty:
+		background = p.Dirty
+	case g.cell == pos:
+		background = p.ActiveCell
+	}
+	// Paint the background and rules over the whole padded cell, matching
+	// the selection border. Rules stay above the background.
 	box.Draw(func(pt *mygoui.Painter, r mygoui.Rect) {
 		x0, y0 := r.X-padX, r.Y-padY
 		w, h := r.W+2*padX, r.H+2*padY
+		if background.A > 0 {
+			pt.Fill(mygoui.Rect{X: x0, Y: y0, W: w, H: h}, background, 0)
+		}
 		pt.Fill(mygoui.Rect{X: x0, Y: y0 + h - 1, W: w, H: 1}, p.GridLine, 0)
 		pt.Fill(mygoui.Rect{X: x0 + w - 1, Y: y0, W: 1, H: h}, p.GridLine, 0)
 		g.paintBottom = max(g.paintBottom, y0+h)
 	})
-	switch {
-	case rowErr != "":
-		box.Background(p.Error).Tooltip(rowErr)
-	case dirty:
-		box.Background(p.Dirty)
-	case g.cell == pos:
-		box.Background(p.ActiveCell)
-	}
 	if g.cell == pos {
-		box.Border(1, g.base.Accent)
+		// Selection covers the table's padding without taking layout space.
+		box.DrawOver(func(pt *mygoui.Painter, r mygoui.Rect) {
+			pt.Stroke(mygoui.Rect{X: r.X - padX, Y: r.Y - padY, W: r.W + 2*padX, H: r.H + 2*padY}, g.base.Accent, 0, 1)
+		})
 	}
 	box.Children(func() {
+		if editing {
+			g.buildEditor(c, tab)
+			return
+		}
 		text := mygoui.Text(c, v.Display(maxCellRunes)).SingleLine()
 		if v.Kind == grid.KindNull || (v.Text == "" && v.Kind != grid.KindBinary) {
 			text.TextColor(p.Null).Italic()
 		}
 	})
+	if editing {
+		return
+	}
 	if box.Clicked() {
 		if g.edit != nil {
 			g.commit(c, tab)
@@ -398,10 +410,11 @@ func (g *gridView) setDraft(tab *app.Tab, pos cellPos, v grid.Value) {
 
 func (g *gridView) buildEditor(c *mygoui.Context, tab *app.Tab) {
 	e := g.edit
-	// The editor takes the full accent (focus ring, selection), not the
-	// paler one of the rows.
-	c.SetTheme(g.base)
-	in := mygoui.TextInput(c.Key("cell-edit"), &e.text).AutoFocus().Grow(1).Label("Cell editor")
+	// The cell supplies padding and selection border in both modes. The
+	// editor only adds editable text, with the window's selection color.
+	in := mygoui.TextInputBase(c.Key("cell-edit"), &e.text).
+		AutoFocus().Grow(1).MinWidth(0).AlignSelf(mygoui.Stretch).
+		SelectionColor(g.base.Selection).FocusRing(false).Label("Cell editor")
 	switch {
 	case in.Submitted():
 		g.commit(c, tab)

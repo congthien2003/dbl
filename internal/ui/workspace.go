@@ -152,9 +152,12 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 		mygoui.Row(c).Padding(2, 12).Children(func() {
 			mygoui.Text(c, "Read-only: "+why).FontSize(12).TextColor(t.TextMuted)
 		})
-	} else if note := v.grid.note(tab); note != "" {
-		mygoui.Row(c).Padding(2, 12).Children(func() {
-			mygoui.Text(c, note).FontSize(12).TextColor(t.TextMuted)
+	} else {
+		// Reserve the hint line before selection and while editing, so the
+		// table stays in place when the hint changes or disappears.
+		note := v.grid.note(tab)
+		mygoui.Row(c).Height(22).Shrink(0).Padding(2, 12).AlignItems(mygoui.Center).Children(func() {
+			mygoui.Text(c, note).SingleLine().FontSize(12).TextColor(t.TextMuted).Tooltip(note)
 		})
 	}
 	if d.Plan.Warning != "" {
