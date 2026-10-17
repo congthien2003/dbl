@@ -535,6 +535,8 @@ Tất cả probe đang ở trạng thái `Not run`; kết quả người dùng c
 - [ ] Save đầu tiên, overwrite, Save As, file không có quyền, đường dẫn không hợp lệ và unsaved prompts.
 - [ ] End-to-end PostgreSQL: quản lý connection → explorer → đọc/sửa/Save/Revert → SQL → local file.
 
+**Kết quả triển khai Phase 2.4 (2026-10-17):** đã bổ sung dedicated SQL sessions, statement selection/parser PostgreSQL, bounded read-only results, cancellation, local SQL files và guards nội dung/transaction theo [spec](superpowers/specs/2026-10-17-phase-2-4-sql-editor-local-files-design.md) và [plan](superpowers/plans/2026-10-17-phase-2-4-sql-editor-local-files.md). Trạng thái **chờ người dùng kiểm tra app và nghiệm thu**. Agent không chạy build/test/lint, PostgreSQL integration hoặc manual app testing theo chỉ dẫn trực tiếp; các checklist trên chưa được xác nhận. Không coi source implementation là bằng chứng PostgreSQL MVP đã nghiệm thu.
+
 ## 10. Phase 3.1 — SQLite
 
 **Mục tiêu:** đưa shared relational workflow sang database file cục bộ.

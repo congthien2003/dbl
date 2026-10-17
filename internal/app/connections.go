@@ -342,6 +342,10 @@ func (s *State) ConfirmConn() {
 	if pc == nil {
 		return
 	}
+	if tabs := s.Workspace.TabsOf(pc.ConnectionID); s.hasSQLTabs(tabs) {
+		s.startSQLAction(tabs, "disconnect this connection", false, func() { s.runPendingConn(pc) })
+		return
+	}
 	s.runPendingConn(pc)
 }
 
@@ -354,7 +358,12 @@ func (s *State) SaveAndConfirmConn() {
 	if pc == nil {
 		return
 	}
-	s.SaveAll(s.Workspace.TabsOf(pc.ConnectionID), func() { s.runPendingConn(pc) })
+	tabs := s.Workspace.TabsOf(pc.ConnectionID)
+	if s.hasSQLTabs(tabs) {
+		s.startSQLAction(tabs, "disconnect this connection", true, func() { s.runPendingConn(pc) })
+		return
+	}
+	s.SaveAll(tabs, func() { s.runPendingConn(pc) })
 }
 
 // countUnsaved counts the tabs with unsaved edits, and those being saved.

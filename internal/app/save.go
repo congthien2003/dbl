@@ -165,6 +165,13 @@ func (s *State) saveRejected(d *TableData, issues []database.Issue) {
 // committed, and the edits must not stay as if it had not. It is dropped only
 // when the tab is gone.
 func (s *State) finishSave(id TabID, d *TableData, o *op, err error, then func()) {
+	defer func() {
+		if err != nil {
+			s.cancelSQLActionFor(id)
+		} else {
+			s.advanceSQLAction()
+		}
+	}()
 	d.saveOp.release(o)
 	tab := s.liveTab(id, d)
 	if tab == nil {
@@ -224,6 +231,12 @@ func (s *State) SaveAll(tabs []*Tab, then func()) {
 			queue = queue[1:]
 			if s.Workspace.Find(t.ID) != t || !t.Dirty() {
 				continue
+			}
+			if t.SQL != nil {
+				if !s.SaveSQLFile(t, false, step) {
+					return
+				}
+				return
 			}
 			if !s.Save(t, step) {
 				s.Workspace.Select(t.ID)

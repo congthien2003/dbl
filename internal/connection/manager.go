@@ -402,6 +402,19 @@ func (m *Manager) SQL(id string) (database.SQLAdapter, bool) {
 	return ad, ok
 }
 
+// SQLSessions returns the independent SQL session capability of an open profile.
+func (m *Manager) SQLSessions(id string) (database.SQLSessionFactory, bool) {
+	if m == nil {
+		return nil, false
+	}
+	e := m.entries[id]
+	if e == nil || e.status != Connected || e.adapter == nil {
+		return nil, false
+	}
+	f, ok := e.adapter.(database.SQLSessionFactory)
+	return f, ok
+}
+
 // Epoch identifies the current session of a connection; it is 0 when there
 // is none. A new session, even after a reconnect, has a new number.
 func (m *Manager) Epoch(id string) uint64 {

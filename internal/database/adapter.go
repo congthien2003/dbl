@@ -21,7 +21,7 @@ type Adapter interface {
 // it returns. Errors are *Error values; a canceled ctx gives KindCanceled
 // and a deadline KindTimeout.
 //
-// Free-form SQL (Execute) arrives with Phase 2.4.
+// Free-form SQL uses the separate SQLSessionFactory capability.
 type SQLAdapter interface {
 	Adapter
 	// ListSchemas lists the schemas of the connected database that the

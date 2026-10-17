@@ -83,6 +83,9 @@ func (sh *Shell) tabStrip(c *mygoui.Context, t *mygoui.Theme, p Palette) {
 					}
 					item.Children(func() {
 						title := mygoui.Text(c, tab.Title).SingleLine()
+						if tab.SQL != nil && tab.SQL.Document.File != nil {
+							title.Tooltip(tab.SQL.Document.File.Path)
+						}
 						if tab.Kind == app.TabTable {
 							// Tabs show the name of the table only; the tooltip
 							// tells apart tables of the same name.

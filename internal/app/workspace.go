@@ -41,14 +41,22 @@ type Tab struct {
 	// Data is the state of a table read from a database, nil otherwise.
 	Data   *TableData
 	Drafts grid.Drafts
+	SQL    *SQLData
 }
 
 // Dirty reports whether the tab holds unsaved data. SQL tabs are never
 // dirty in Phase 1 (their protection arrives with local files).
-func (t *Tab) Dirty() bool { return t.Kind == TabTable && t.Drafts.Len() > 0 }
+func (t *Tab) Dirty() bool {
+	if t.SQL != nil {
+		return t.SQL.Document.Dirty()
+	}
+	return t.Kind == TabTable && t.Drafts.Len() > 0
+}
 
 // Saving reports whether a Save of the tab is running.
-func (t *Tab) Saving() bool { return t.Data != nil && t.Data.SaveState == OpLoading }
+func (t *Tab) Saving() bool {
+	return t.Data != nil && t.Data.SaveState == OpLoading || t.SQL != nil && t.SQL.Document.FileState == OpLoading
+}
 
 // Workspace is the ordered list of open tabs and the active one.
 type Workspace struct {
@@ -87,6 +95,7 @@ func (w *Workspace) NewSQL(connectionID string) *Tab {
 		Kind:  TabSQL,
 		Title: fmt.Sprintf("Query %d", w.sqlCount),
 		Table: TableKey{ConnectionID: connectionID},
+		SQL:   &SQLData{Page: 1},
 	}
 	w.Tabs = append(w.Tabs, tab)
 	w.ActiveID = tab.ID
@@ -118,6 +127,7 @@ func (w *Workspace) Close(id TabID) {
 		return
 	}
 	w.Tabs[i].Data.release()
+	w.Tabs[i].SQL.release()
 	w.Tabs = append(w.Tabs[:i:i], w.Tabs[i+1:]...)
 	if w.ActiveID != id {
 		return

@@ -89,7 +89,13 @@ func (sl *opSlot) finish(s *State, connectionID string, o *op) bool {
 }
 
 // post runs fn on the UI thread, through the manager's poster.
-func (s *State) post(fn func()) { s.Conns.Post(fn) }
+func (s *State) post(fn func()) {
+	if s.Post != nil {
+		s.Post(fn)
+		return
+	}
+	s.Conns.Post(fn)
+}
 
 // noSession is the error of work that needs a connection that is not
 // open.
