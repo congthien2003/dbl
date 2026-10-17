@@ -8,7 +8,111 @@ import (
 
 	"dbl/internal/app"
 	"dbl/internal/connection"
+	"dbl/internal/storage"
 )
+
+func (sh *Shell) sqlModalOpen() bool {
+	s := sh.st
+	if sh.form != nil || sh.nameDlg != nil || s.PendingConn != nil || s.PendingFolderDelete != "" || s.PendingEdit != nil || s.PendingClose != 0 || s.PendingQuit || s.PendingSQL != nil || sh.promptID() != "" {
+		return true
+	}
+	if s.SQLServices != nil && s.SQLServices.DialogBusy() {
+		return true
+	}
+	for _, tab := range s.Workspace.Tabs {
+		if tab.SQL == nil {
+			continue
+		}
+		if tab.SQL.PendingInput != nil {
+			return true
+		}
+		var conflict *storage.FileConflict
+		if tab.SQL.Document.FileState == app.OpLoading && errors.As(tab.SQL.Document.FileErr, &conflict) {
+			return true
+		}
+	}
+	return false
+}
+
+func (sh *Shell) sqlDialogs(c *mygoui.Context) bool {
+	s := sh.st
+	if s.SQLServices != nil && s.SQLServices.DialogBusy() {
+		return true
+	}
+	for _, tab := range s.Workspace.Tabs {
+		if tab.SQL == nil {
+			continue
+		}
+		var conflict *storage.FileConflict
+		if tab.SQL.Document.FileState == app.OpLoading && errors.As(tab.SQL.Document.FileErr, &conflict) {
+			open := true
+			switch mygoui.AlertDialog(c, &open, "Overwrite SQL file?", "The target file exists or changed outside this tab. Overwrite it with the captured SQL contents?", "Cancel", "Overwrite") {
+			case 1:
+				s.ResolveSQLFileConflict(tab, true)
+				c.Invalidate()
+			case 0, mygoui.AlertDismissed:
+				s.ResolveSQLFileConflict(tab, false)
+				c.Invalidate()
+			}
+			return true
+		}
+		if input := tab.SQL.PendingInput; input != nil {
+			open := true
+			switch mygoui.AlertDialog(c, &open, "Open a new SQL session?", "The previous session ended. Its transaction, settings and temporary objects cannot be restored. Open a new session and execute the selected SQL?", "Cancel", "Open and execute") {
+			case 1:
+				s.ExecuteSQL(tab, *input, true)
+				c.Invalidate()
+			case 0, mygoui.AlertDismissed:
+				tab.SQL.PendingInput = nil
+				c.Invalidate()
+			}
+			return true
+		}
+	}
+	p := s.PendingSQL
+	if p == nil {
+		return false
+	}
+	name := "This tab"
+	if tab := s.Workspace.Find(p.Tab); tab != nil {
+		name = tab.Title
+	}
+	title, message := "Waiting for work to finish", name+": a save or session cleanup is finishing. Cancel keeps the app open; completed work is kept."
+	buttons := []string{"Cancel"}
+	choices := []app.SQLActionChoice{app.SQLActionCancel}
+	switch p.Stage {
+	case app.SQLGuardQuery:
+		title = "Stop the running query?"
+		message = name + " has a running query. Stop it before you " + p.Reason + ". Stopping a query does not guarantee that no changes were made."
+		buttons = append(buttons, "Stop query and continue")
+		choices = append(choices, app.SQLActionStopQuery)
+	case app.SQLGuardDocument:
+		title = "Unsaved changes"
+		message = name + " has unsaved changes. Save them before you " + p.Reason + ", continue without saving, or cancel. Changing only the SQL connection keeps the unsaved text."
+		buttons = append(buttons, "Continue without saving", "Save and continue")
+		choices = append(choices, app.SQLActionDiscardDocument, app.SQLActionSaveDocument)
+	case app.SQLGuardTransaction:
+		title = "Roll back the open transaction?"
+		message = name + " has an open transaction. Roll it back and close the session before you " + p.Reason + ". Saving the SQL file does not commit database changes."
+		buttons = append(buttons, "Roll back and continue")
+		choices = append(choices, app.SQLActionRollback)
+	case app.SQLGuardUncertain:
+		title = "Query outcome is unknown"
+		message = name + ": some changes may have completed. Continuing will not undo changes that reached the database. Check the database before running the SQL again."
+		buttons = append(buttons, "Continue")
+		choices = append(choices, app.SQLActionContinue)
+	}
+	open := true
+	answer := mygoui.AlertDialog(c, &open, title, message, buttons...)
+	if answer == mygoui.AlertDismissed {
+		s.ResolveSQLAction(app.SQLActionCancel)
+		c.Invalidate()
+	} else if answer >= 0 && answer < len(choices) {
+		s.ResolveSQLAction(choices[answer])
+		c.Invalidate()
+	}
+	return true
+}
 
 // ---- Name dialog: new folder, rename folder, rename connection ----
 

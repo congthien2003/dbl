@@ -52,7 +52,13 @@ type tabView struct {
 
 // NewShell returns the shell for st.
 func NewShell(st *app.State) *Shell {
-	return &Shell{st: st, explorer: newExplorer(), views: map[app.TabID]*tabView{}}
+	sh := &Shell{st: st, explorer: newExplorer(), views: map[app.TabID]*tabView{}}
+	st.OnSQLQuitReady = func() {
+		if sh.OnQuitConfirmed != nil {
+			sh.OnQuitConfirmed()
+		}
+	}
+	return sh
 }
 
 func (sh *Shell) viewFor(tab *app.Tab) *tabView {
@@ -61,6 +67,8 @@ func (sh *Shell) viewFor(tab *app.Tab) *tabView {
 		v = &tabView{}
 		if tab.Kind == app.TabSQL {
 			v.sql = newSQLView()
+			v.sql.owner = sh.st
+			v.sql.bind(tab)
 		} else {
 			v.grid = newGridView()
 		}
@@ -79,12 +87,25 @@ func (sh *Shell) pruneViews() {
 }
 
 // View builds the whole window.
+func (sh *Shell) SyncSQLDocuments() {
+	for id, v := range sh.views {
+		if v.sql != nil {
+			if tab := sh.st.Workspace.Find(id); tab != nil {
+				v.sql.syncDocument(tab)
+			}
+		}
+	}
+}
+func (sh *Shell) RequestQuit() bool { sh.SyncSQLDocuments(); return sh.st.RequestQuit() }
+
+// View builds the whole window.
 func (sh *Shell) View(c *mygoui.Context) {
+	sh.SyncSQLDocuments()
 	sh.pruneViews()
 	sh.fader.apply(c)
 	t := c.Theme()
 	p := NewPalette(t)
-	if c.Shortcut(mygoui.Cmd, mygoui.KeyN) {
+	if !sh.sqlModalOpen() && c.Shortcut(mygoui.Cmd, mygoui.KeyN) {
 		sh.newSQL()
 		c.Invalidate()
 	}
@@ -207,6 +228,9 @@ func (sh *Shell) statusBar(c *mygoui.Context, t *mygoui.Theme) {
 
 // dialogs shows the dialogs the state asks for.
 func (sh *Shell) dialogs(c *mygoui.Context, t *mygoui.Theme) {
+	if sh.sqlDialogs(c) {
+		return
+	}
 	sh.connFormView(c, t)
 	sh.nameDialogView(c, t)
 	sh.connectionDialogs(c)
@@ -218,7 +242,7 @@ func (sh *Shell) dialogs(c *mygoui.Context, t *mygoui.Theme) {
 // a tab that is being saved already has its Save under way.
 func canSave(tabs []*app.Tab) bool {
 	for _, t := range tabs {
-		if t.Dirty() && t.Data != nil && !t.Saving() {
+		if t.Dirty() && (t.Data != nil || t.SQL != nil) && !t.Saving() {
 			return true
 		}
 	}

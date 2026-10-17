@@ -3,10 +3,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -151,6 +153,12 @@ func main() {
 	conns := connection.NewManager(&st.Catalog, storage.SystemCredentials{}, postgres.Connect, post)
 	conns.OnCredentialIssue = st.ReportCredentialIssue
 	st.Conns = conns
+	st.Post = post
+	queriesDir, queriesErr := storage.DefaultQueriesDir()
+	if queriesErr != nil {
+		addNotice(st, "The default queries folder is unavailable; choose an absolute SQL file location.")
+	}
+	st.SQLServices = app.NewSQLServices(storage.NewSQLStore(queriesDir), dblui.NewSQLDialogs(queriesDir))
 	st.ScheduleCatalogSave = catSaver.Schedule
 	st.SetThemeSource = func(p storage.ThemePref) { mygo.Theme.SetSource(dblui.ThemeSource(p)) }
 	st.ScheduleSave = saver.Schedule
@@ -159,13 +167,40 @@ func main() {
 	// shutdown ends every session and writes what is waiting. Which of the
 	// hooks below runs last when the window closes is not settled, so each
 	// calls it; it is safe to call again.
+	var shutdownOnce sync.Once
 	shutdown := func() {
-		conns.CloseAll(shutdownTimeout)
-		catSaver.Flush()
-		saver.Flush()
+		shutdownOnce.Do(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+			defer cancel()
+			done := make(chan struct{})
+			go func() { defer close(done); _ = st.CloseSQL(ctx) }()
+			// Manager state remains on the UI thread; SQL cleanup runs beside it.
+			deadline, _ := ctx.Deadline()
+			conns.CloseAll(max(time.Until(deadline), 0))
+			select {
+			case <-done:
+			case <-ctx.Done():
+			}
+			catSaver.Flush()
+			saver.Flush()
+		})
 	}
 
 	shell := dblui.NewShell(st)
+	quitApproved := false
+	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
+		if quitApproved {
+			return
+		}
+		if shell.RequestQuit() {
+			quitApproved = true
+			return
+		}
+		e.PreventDefault()
+		if w := win.Load(); w != nil {
+			w.Invalidate()
+		}
+	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { shutdown() })
 	mygo.App.WhenReady(func() {
 		w := mygo.NewWindow(mygo.WindowOptions{
@@ -177,15 +212,16 @@ func main() {
 			Content:   mygoui.View(shell.View),
 		})
 		shell.OnQuitConfirmed = func() {
-			shutdown()
-			w.Destroy()
+			quitApproved = true
+			mygo.App.Quit()
 		}
+		shell.SetWindow(w)
 		w.OnResize(func() {
 			width, height := w.Size()
 			st.SetWindowSize(width, height)
 		})
 		w.OnClose(func(e *mygo.CloseEvent) {
-			if !st.RequestQuit() {
+			if !quitApproved && !shell.RequestQuit() {
 				e.PreventDefault()
 				w.Invalidate()
 			}

@@ -9,8 +9,12 @@ import (
 // methods run on the UI thread. The zero value is usable: it has no
 // connections and nothing to connect with.
 type State struct {
-	Settings  storage.Settings
-	Workspace Workspace
+	SQLServices    *SQLServices
+	Post           func(func())
+	PendingSQL     *PendingSQLAction
+	OnSQLQuitReady func()
+	Settings       storage.Settings
+	Workspace      Workspace
 	// Explorer holds what the explorer read below the connections.
 	Explorer ExplorerData
 
@@ -91,6 +95,9 @@ func (s *State) RequestClose(id TabID) (closed bool) {
 	if tab == nil {
 		return false
 	}
+	if tab.SQL != nil {
+		return s.startSQLAction([]*Tab{tab}, "close this tab", false, func() { s.Workspace.Close(id) })
+	}
 	if tab.Dirty() {
 		s.PendingClose = id
 		return false
@@ -124,6 +131,19 @@ func (s *State) CancelClose() { s.PendingClose = 0 }
 // RequestQuit reports whether the window may close. With unsaved changes it
 // sets PendingQuit and returns false.
 func (s *State) RequestQuit() (allowed bool) {
+	if s.PendingSQL != nil {
+		return false
+	}
+	if s.hasSQLTabs(s.Workspace.Tabs) {
+		waiting := false
+		completed := s.startSQLAction(s.Workspace.Tabs, "exit the app", false, func() {
+			if waiting && s.OnSQLQuitReady != nil {
+				s.OnSQLQuitReady()
+			}
+		})
+		waiting = !completed
+		return completed
+	}
 	if len(s.Workspace.DirtyTabs()) > 0 {
 		s.PendingQuit = true
 		return false

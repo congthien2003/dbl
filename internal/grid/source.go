@@ -2,6 +2,8 @@ package grid
 
 // Column describes a column of a grid.
 type Column struct {
+	// ID distinguishes SQL columns with identical labels; empty uses Name.
+	ID         string
 	Name       string
 	NativeType string
 	Kind       Kind

@@ -33,14 +33,15 @@ type Adapter struct {
 	// the result of COMMIT is not known, as a lost connection would.
 	UnknownCommit bool
 
-	mu      sync.Mutex
-	schemas []database.Schema
-	tables  map[string][]database.Table
-	data    map[string]*Table
-	calls   []string
-	closed  bool
-	reqs    []database.PageRequest
-	saves   []database.SaveRequest
+	mu       sync.Mutex
+	schemas  []database.Schema
+	tables   map[string][]database.Table
+	data     map[string]*Table
+	calls    []string
+	closed   bool
+	reqs     []database.PageRequest
+	saves    []database.SaveRequest
+	sqlQueue []*SQLSession
 }
 
 // New returns an adapter with no schemas.

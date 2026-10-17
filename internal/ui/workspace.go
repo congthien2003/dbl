@@ -99,8 +99,12 @@ func (sh *Shell) tableTab(c *mygoui.Context, t *mygoui.Theme, p Palette, tab *ap
 			}
 		}
 	})
-	if tab.Data != nil && tab.Dirty() && !tab.Saving() && c.Shortcut(mygoui.Cmd, mygoui.KeyS) {
+	if !sh.sqlModalOpen() && tab.Data != nil && tab.Dirty() && !tab.Saving() && c.Shortcut(mygoui.Cmd, mygoui.KeyS) {
 		sh.save(c, tab, v)
+	}
+	if !sh.sqlModalOpen() && d != nil && c.Shortcut(0, mygoui.KeyF5) {
+		sh.st.ReloadTable(tab)
+		c.Invalidate()
 	}
 	if d == nil {
 		// A source that is not a database table (tests): the grid alone.

@@ -79,7 +79,7 @@ func (g *gridView) columns(src grid.Source) []mygoui.TableColumn {
 	cols := src.Columns()
 	sig := ""
 	for _, col := range cols {
-		sig += col.Name + ""
+		sig += col.ID + "\u001e" + col.Name + "\u001f"
 		if col.PrimaryKey {
 			sig += "p"
 		}
@@ -94,7 +94,11 @@ func (g *gridView) columns(src grid.Source) []mygoui.TableColumn {
 			if col.PrimaryKey {
 				title = " "
 			}
-			g.cols[i] = mygoui.TableColumn{Title: title + col.Name, ID: col.Name, Width: col.Width, MinWidth: 60, Sortable: col.Sortable}
+			id := col.ID
+			if id == "" {
+				id = col.Name
+			}
+			g.cols[i] = mygoui.TableColumn{Title: title + col.Name, ID: id, Width: col.Width, MinWidth: 60, Sortable: col.Sortable}
 		}
 	}
 	return g.cols

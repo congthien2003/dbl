@@ -3,8 +3,10 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"dbl/internal/connection"
@@ -16,7 +18,13 @@ type Adapter struct {
 	db *sql.DB
 	// catalog is the database the pool is bound to, the Catalog of every
 	// table reference this adapter returns.
-	catalog string
+	catalog     string
+	sqlMu       sync.Mutex
+	sqlConfig   *pgx.ConnConfig
+	sqlCtx      context.Context
+	endSQL      context.CancelFunc
+	sqlClosed   bool
+	sqlSessions map[*sqlSession]struct{}
 }
 
 // Ping checks that the server answers.
@@ -28,7 +36,13 @@ func (a *Adapter) Ping(ctx context.Context) error {
 }
 
 // Close closes every connection of the pool; it is safe to call twice.
-func (a *Adapter) Close() error { return a.db.Close() }
+func (a *Adapter) Close() error {
+	a.closeSQLSessions()
+	if a.db != nil {
+		return a.db.Close()
+	}
+	return nil
+}
 
 // Connect opens a pool for the profile and checks it with a ping, within
 // the profile's timeout. On any failure nothing is left open, and the error
@@ -48,5 +62,6 @@ func Connect(ctx context.Context, p connection.Profile, password string) (databa
 		_ = db.Close()
 		return nil, classify(err, p, password)
 	}
-	return &Adapter{db: db, catalog: p.Database}, nil
+	life, endSQL := context.WithCancel(context.Background())
+	return &Adapter{db: db, catalog: p.Database, sqlConfig: cfg.Copy(), sqlCtx: life, endSQL: endSQL, sqlSessions: map[*sqlSession]struct{}{}}, nil
 }
