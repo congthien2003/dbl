@@ -31,6 +31,7 @@ func (d *NativeSQLDialogs) SaveSQL(suggested string) (string, error) {
 	return mygo.Dialog.Save(mygo.SaveDialogOptions{Parent: d.parent, Title: "Save SQL file", DefaultPath: suggested, CreateDirectories: true, Filters: []mygo.FileFilter{{Name: "SQL files", Extensions: []string{"sql"}}}})
 }
 func (sh *Shell) SetWindow(w *mygo.Window) {
+	sh.win = w
 	if sh.st.SQLServices != nil {
 		if d, ok := sh.st.SQLServices.Dialogs.(*NativeSQLDialogs); ok {
 			d.parent = w

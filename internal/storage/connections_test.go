@@ -242,3 +242,34 @@ func TestConnectionsSaveFailureLeavesNoTemporaryFile(t *testing.T) {
 		t.Errorf("files left behind: %v", left)
 	}
 }
+
+func TestSQLiteProfileRoundTripsAndOldFilesLoad(t *testing.T) {
+	dir := t.TempDir()
+	var c connection.Catalog
+	want, err := c.AddProfile(connection.Profile{Name: "Notes", Driver: connection.DriverSQLite, SQLitePath: filepath.Join(dir, "n.db"), ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := NewConnectionsStore(dir).Save(c); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := NewConnectionsStore(dir).Load()
+	if err != nil || len(got.Profiles) != 1 || got.Profiles[0] != want {
+		t.Fatalf("Load: %+v %v", got.Profiles, err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "connections.json"))
+	if !strings.Contains(string(raw), "sqlitePath") || strings.Contains(string(raw), "secretRef") {
+		t.Errorf("file: %s", raw)
+	}
+
+	// A file written before SQLite existed has no sqlitePath or readOnly.
+	old := t.TempDir()
+	body := `{"version":1,"folders":[],"connections":[{"id":"a","name":"PG","driver":"postgres","host":"h","port":5432,"database":"d","username":"u","tls":{"mode":"require"},"connectTimeoutSec":10,"pool":{"maxOpen":2,"maxIdle":1}}]}`
+	if err := os.WriteFile(filepath.Join(old, "connections.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _, err := NewConnectionsStore(old).Load()
+	if err != nil || len(loaded.Profiles) != 1 || loaded.Profiles[0].SQLitePath != "" || loaded.Profiles[0].ReadOnly {
+		t.Errorf("old file: %+v %v", loaded.Profiles, err)
+	}
+}

@@ -1,6 +1,11 @@
 package app
 
-import "dbl/internal/database"
+import (
+	"path/filepath"
+
+	"dbl/internal/connection"
+	"dbl/internal/database"
+)
 
 // SchemaNode is a schema of a connected database and, once read, its tables
 // and views.
@@ -70,6 +75,9 @@ func (s *State) Tree(connectionID string) *ConnTree {
 	t = &ConnTree{Epoch: epoch}
 	if p, ok := s.Catalog.Profile(connectionID); ok {
 		t.Database = p.Database
+		if p.Driver == connection.DriverSQLite {
+			t.Database = filepath.Base(p.SQLitePath)
+		}
 	}
 	ex.trees[connectionID] = t
 	ex.Rev++

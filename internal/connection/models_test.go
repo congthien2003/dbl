@@ -368,3 +368,119 @@ func TestSecretRefUsesIDNotName(t *testing.T) {
 		t.Errorf("SecretRefFor = %q", got)
 	}
 }
+
+func TestDriversListsEveryDriverOnce(t *testing.T) {
+	want := []DriverType{DriverPostgres, DriverSQLite, DriverMySQL, DriverSQLServer, DriverRedis}
+	if len(Drivers) != len(want) {
+		t.Fatalf("Drivers = %v", Drivers)
+	}
+	seen := map[DriverType]bool{}
+	for i, d := range Drivers {
+		if seen[d] {
+			t.Errorf("%s is listed twice", d)
+		}
+		seen[d] = true
+		if d != want[i] {
+			t.Errorf("Drivers[%d] = %s, want %s", i, d, want[i])
+		}
+	}
+	if Drivers[0] != DriverPostgres {
+		t.Errorf("first driver %s", Drivers[0])
+	}
+}
+
+func sqliteProfile() Profile {
+	return Profile{Name: "Notes", Driver: DriverSQLite, SQLitePath: filepath.Join(os.TempDir(), "notes.db")}
+}
+
+func TestSQLiteProfileValidates(t *testing.T) {
+	p := sqliteProfile().Normalized()
+	if errs := p.Validate(); len(errs) != 0 {
+		t.Errorf("errors: %+v", errs)
+	}
+}
+
+func TestSQLiteProfileRequiresPath(t *testing.T) {
+	p := sqliteProfile()
+	p.SQLitePath = "  "
+	errs := p.Normalized().Validate()
+	if len(errs) != 1 || errs[0].Field != FieldPath {
+		t.Errorf("errors: %+v", errs)
+	}
+	p = sqliteProfile()
+	p.Name = ""
+	errs = p.Normalized().Validate()
+	if len(errs) != 1 || errs[0].Field != FieldName {
+		t.Errorf("errors: %+v", errs)
+	}
+}
+
+func TestSQLiteNormalizedClearsNetworkFields(t *testing.T) {
+	p := sqliteProfile()
+	p.Host, p.Port, p.Database, p.Username, p.SecretRef = "h", 5432, "d", "u", "dbl/x"
+	p.TLS = TLSOptions{Mode: TLSRequire, RootCert: "ca.pem"}
+	p.Pool = PoolOptions{MaxOpen: 4, MaxIdle: 2}
+	p.SQLitePath = "  " + p.SQLitePath + " "
+	got := p.Normalized()
+	if got.Host != "" || got.Port != 0 || got.Database != "" || got.Username != "" || got.SecretRef != "" ||
+		got.TLS != (TLSOptions{}) || got.Pool != (PoolOptions{}) {
+		t.Errorf("kept network fields: %+v", got)
+	}
+	if got.SQLitePath != sqliteProfile().SQLitePath || got.ConnectTimeoutSec != DefaultConnectTimeoutSec {
+		t.Errorf("path %q timeout %d", got.SQLitePath, got.ConnectTimeoutSec)
+	}
+}
+
+func TestPostgresValidationUnchanged(t *testing.T) {
+	p := Profile{Name: "x", Driver: DriverPostgres}.Normalized()
+	fields := map[string]bool{}
+	for _, fe := range p.Validate() {
+		fields[fe.Field] = true
+	}
+	for _, want := range []string{FieldHost, FieldDatabase, FieldUsername} {
+		if !fields[want] {
+			t.Errorf("no error for %s", want)
+		}
+	}
+	if fields[FieldPath] {
+		t.Error("PostgreSQL asks for a file")
+	}
+}
+
+func TestTargetForEachDriver(t *testing.T) {
+	pg := Profile{Driver: DriverPostgres, Host: "db.internal", Database: "app", Username: "me"}
+	if got := pg.Target(); got != "app (me@db.internal)" {
+		t.Errorf("PostgreSQL target %q", got)
+	}
+	lite := Profile{Driver: DriverSQLite, SQLitePath: filepath.Join("data", "notes.db")}
+	if got := lite.Target(); got != "notes.db" {
+		t.Errorf("SQLite target %q", got)
+	}
+}
+
+func TestValidateFilesSQLitePathMissing(t *testing.T) {
+	p := Profile{Name: "n", Driver: DriverSQLite, SQLitePath: filepath.Join(t.TempDir(), "absent.db")}
+	errs := p.ValidateFiles()
+	if len(errs) != 1 || errs[0].Field != FieldPath {
+		t.Errorf("errors: %+v", errs)
+	}
+	if _, err := os.Stat(p.SQLitePath); err == nil {
+		t.Error("validating created the file")
+	}
+}
+
+func TestValidateFilesSQLitePathIsDirectory(t *testing.T) {
+	p := Profile{Name: "n", Driver: DriverSQLite, SQLitePath: t.TempDir()}
+	errs := p.ValidateFiles()
+	if len(errs) != 1 || errs[0].Field != FieldPath {
+		t.Errorf("errors: %+v", errs)
+	}
+	file := filepath.Join(t.TempDir(), "ok.db")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p.SQLitePath = file
+	if errs := p.ValidateFiles(); len(errs) != 0 {
+		t.Errorf("an existing file was refused: %+v", errs)
+	}
+}

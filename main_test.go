@@ -187,3 +187,28 @@ func TestConnectionsNoticeSaysWhetherABackupExists(t *testing.T) {
 		t.Errorf("notice %q: no backup exists when the file could not be moved", notKept)
 	}
 }
+
+func TestConnectDriverRoutesByDriver(t *testing.T) {
+	_, err := connectDriver(context.Background(), connection.Profile{Driver: connection.DriverMySQL}, "")
+	if database.KindOf(err) != database.KindUnsupported {
+		t.Errorf("MySQL: %v", err)
+	}
+
+	// SQLite reaches the SQLite adapter: a missing file is reported by it,
+	// with no network error.
+	missing := filepath.Join(t.TempDir(), "absent.db")
+	_, err = connectDriver(context.Background(), connection.Profile{Driver: connection.DriverSQLite, SQLitePath: missing}, "")
+	if database.KindOf(err) != database.KindFileAccess {
+		t.Errorf("SQLite: %v", err)
+	}
+	if _, statErr := os.Stat(missing); statErr == nil {
+		t.Error("connecting created the file")
+	}
+
+	// PostgreSQL reaches the PostgreSQL adapter, whose errors are not file
+	// errors.
+	_, err = connectDriver(context.Background(), connection.Profile{Driver: connection.DriverPostgres, Host: "256.256.256.256", Port: 1, Database: "d", Username: "u", ConnectTimeoutSec: 1}, "")
+	if err == nil || database.KindOf(err) == database.KindFileAccess || database.KindOf(err) == database.KindUnsupported {
+		t.Errorf("PostgreSQL: %v", err)
+	}
+}

@@ -768,3 +768,25 @@ func TestEditOfADeletedProfileIsRefused(t *testing.T) {
 	case <-time.After(30 * time.Millisecond):
 	}
 }
+
+func TestEditingSQLitePathEndsSession(t *testing.T) {
+	base := connection.Profile{Name: "n", Driver: connection.DriverSQLite, SQLitePath: "a.db"}
+	if affectsSession(base, base, connection.PasswordChange{}) {
+		t.Error("an unchanged profile ends the session")
+	}
+	moved := base
+	moved.SQLitePath = "b.db"
+	if !affectsSession(base, moved, connection.PasswordChange{}) {
+		t.Error("a new path keeps the session")
+	}
+	ro := base
+	ro.ReadOnly = true
+	if !affectsSession(base, ro, connection.PasswordChange{}) {
+		t.Error("read-only keeps the session")
+	}
+	renamed := base
+	renamed.Name = "other"
+	if affectsSession(base, renamed, connection.PasswordChange{}) {
+		t.Error("a rename ends the session")
+	}
+}

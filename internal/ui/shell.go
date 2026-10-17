@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egoist/mygo"
 	mygoui "github.com/egoist/mygo/ui"
 
 	"dbl/internal/app"
@@ -40,6 +41,11 @@ type Shell struct {
 	form    *connForm
 	nameDlg *nameDialog
 	pw      pwPrompt
+
+	win *mygo.Window
+	// pickFile asks for a SQLite file; tests replace it, nil means the
+	// native dialog.
+	pickFile func() (string, error)
 }
 
 // tabView is the view-only state of one tab. It lives as long as the tab.

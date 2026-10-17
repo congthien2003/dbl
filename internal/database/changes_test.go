@@ -190,3 +190,36 @@ func TestSaveErrorUnwrapsToError(t *testing.T) {
 		t.Errorf("SaveError fields lost: %+v", se)
 	}
 }
+
+func TestCheckNumberUsesIntBits(t *testing.T) {
+	c := ColumnMetadata{Name: "n", Class: ClassNumber, NativeType: "INTEGER", IntBits: 64}
+	if msg := checkNumber(c, "9223372036854775807"); msg != "" {
+		t.Errorf("the largest 64-bit integer: %s", msg)
+	}
+	if msg := checkNumber(c, "9223372036854775808"); msg == "" {
+		t.Error("an integer past 64 bits was accepted")
+	}
+	if msg := checkNumber(c, "abc"); msg == "" {
+		t.Error("text was accepted in an integer column")
+	}
+	// Without IntBits the width comes from the native type, as before.
+	pg := ColumnMetadata{Name: "n", Class: ClassNumber, NativeType: "integer"}
+	if msg := checkNumber(pg, "2147483648"); msg == "" {
+		t.Error("a 32-bit column accepted a 64-bit value")
+	}
+}
+
+func TestReadOnlyTableIsNotEditable(t *testing.T) {
+	m := &TableMetadata{
+		Columns:  []ColumnMetadata{{Name: "id", Class: ClassNumber}},
+		Identity: RowIdentity{Source: IdentityPrimaryKey, Columns: []string{"id"}},
+		ReadOnly: "The connection is read-only.",
+	}
+	if ok, why := m.Editable(); ok || why != m.ReadOnly {
+		t.Errorf("Editable = %v, %q", ok, why)
+	}
+	m.ReadOnly = ""
+	if ok, why := m.Editable(); !ok {
+		t.Error(why)
+	}
+}

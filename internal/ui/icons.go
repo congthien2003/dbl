@@ -3,6 +3,7 @@ package ui
 import (
 	mygoui "github.com/egoist/mygo/ui"
 
+	"dbl/internal/connection"
 	"dbl/resources"
 )
 
@@ -44,6 +45,24 @@ var icons = struct {
 	ThemeDark:   icon("moon-stars.svg"),
 	// Close is two strokes; resources/ has no file for it.
 	Close: mygoui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`)),
+}
+
+// driverIcon is the icon of a database type in the new-connection dialog.
+// Drivers without a logo of their own show the generic database icon;
+// giving one a logo is one more case here.
+func driverIcon(d connection.DriverType) *mygoui.SVG {
+	switch d {
+	case connection.DriverPostgres:
+		return driverIcons.Postgres
+	case connection.DriverMySQL:
+		return driverIcons.MySQL
+	}
+	return icons.Database
+}
+
+var driverIcons = struct{ Postgres, MySQL *mygoui.SVG }{
+	Postgres: icon("postgresql.svg"),
+	MySQL:    icon("my-sql.svg"),
 }
 
 // keyIcon is an icon a column shows, with its color and its name.

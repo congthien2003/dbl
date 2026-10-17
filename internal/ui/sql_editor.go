@@ -53,7 +53,7 @@ func (v *sqlView) build(c *mygoui.Context, t *mygoui.Theme, sh *Shell, tab *app.
 			if !p.Driver.Supported() {
 				continue
 			}
-			label := fmt.Sprintf("%s · %s (%s@%s)", p.Name, p.Database, p.Username, p.Host)
+			label := fmt.Sprintf("%s · %s", p.Name, p.Target())
 			seen[label]++
 			if n := seen[label]; n > 1 {
 				label = fmt.Sprintf("%s (%d)", label, n)

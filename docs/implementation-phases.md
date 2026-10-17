@@ -560,6 +560,25 @@ Tất cả probe đang ở trạng thái `Not run`; kết quả người dùng c
 - [ ] Composite keys, NULL, generated columns, views, reserved identifiers, concurrency và rollback.
 - [ ] SQL selection/parser, pagination/filter/sort và shared UI regression với PostgreSQL.
 
+**Kết quả triển khai Phase 3.1 (2026-10-17):** đã bổ sung bước chọn loại database (lưới icon, loại chưa hỗ trợ mờ kèm "Soon"), form SQLite (File, Browse…, Open read-only), `Profile.SQLitePath`/`ReadOnly`, `connectDriver` chọn adapter theo driver và adapter `internal/database/sqlite/` (kết nối chỉ mở file có sẵn với `mode=rw|ro`, metadata, đọc trang/lọc/sắp xếp, Save với kiểm tra xung đột theo kiểu lưu trữ, SQL editor với phiên riêng cho mỗi tab) theo [spec](superpowers/specs/2026-10-17-phase-3-1-sqlite-design.md) và [plan](superpowers/plans/2026-10-17-phase-3-1-sqlite.md). Trạng thái **chờ người dùng kiểm tra app và nghiệm thu**; các checklist trên chưa được xác nhận.
+
+Đã chạy tự động: `gofmt`, `CGO_ENABLED=0 go build ./...` và `go test ./...`. Các test SQLite (adapter và tầng app với file SQLite thật) và test form/picker đều pass. **Chưa kiểm:** manual app testing; PostgreSQL integration (26 test báo skip vì thiếu `DBL_TEST_PG_*`); nhánh "phiên mất khi file bị xoá" (Windows không cho xoá file đang mở nên test tự bỏ qua).
+
+**Lỗi test có sẵn từ trước, không do phase này:** `TestMenuNewSQLTabIsBoundToTheConnection` (internal/ui) fail cả trên mã sạch; `TestPendingEditSaveRunsTheActionOnlyAfterCommit` (internal/app) lúc pass lúc fail trên mã sạch. `go vet ./...` còn cảnh báo `SQLSpan` unkeyed fields ở `postgres/statement_test.go` (có từ trước).
+
+**Quyết định khi triển khai (lệch hoặc làm rõ so với plan):**
+
+- Không import `ncruces/go-sqlite3/embed`: bản v0.35.6 đã gói sẵn SQLite, import này là thừa. Module kéo thêm `ncruces/go-sqlite3-wasm/v6`, `ncruces/julianday` và `golang.org/x/sys` làm phụ thuộc gián tiếp.
+- DSN dạng `file:<đường dẫn>?mode=…`, chỉ escape `%`, `#`, `?`; không dùng dạng URL `/C:/…` vì VFS Windows của driver không mở được.
+- SQLite không có trạng thái "giao dịch hỏng": lệnh lỗi trong giao dịch giữ nguyên giao dịch (trạng thái "In transaction"), người dùng tự ROLLBACK hoặc COMMIT.
+- Giá trị cũ khi Save so sánh theo `typeof()` cộng giá trị: số so sánh bằng số, chữ so sánh từng byte (`COLLATE BINARY`), nên `1` khác `'1'` và `abc` khác `ABC` dù cột có collation NOCASE.
+- Mỗi cột được đọc dưới dạng biểu thức (`CASE typeof(c)`), để blob không bao giờ được tải và driver không tự đổi ngày/boolean theo kiểu khai báo.
+- Chế độ chỉ đọc: tự mở `mode=ro` khi file không ghi được, ngoài checkbox của người dùng; mọi bảng khi đó có `TableMetadata.ReadOnly` và Save bị từ chối.
+- Bảng không khoá chính hoặc chỉ có unique index trên cột nullable thì chỉ đọc; không dùng `rowid` làm định danh. Chỉ hiện schema `main`.
+- Không đổi `journal_mode`; busy timeout 5 giây, bật `foreign_keys`.
+- Bộ tách statement của SQLite không báo lỗi với block comment chưa đóng (SQLite coi là comment đến hết văn bản), khác bộ tách PostgreSQL.
+- Test viết sau mã nguồn, nên bước "xác nhận test FAIL trước" của plan không được quan sát.
+
 ## 11. Phase 3.2 — MySQL/MariaDB
 
 **Mục tiêu:** bổ sung engine network relational với database/schema mapping riêng.

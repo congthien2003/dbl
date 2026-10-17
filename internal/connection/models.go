@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -16,8 +17,8 @@ import (
 // DriverType names a database engine (spec 6.1).
 type DriverType string
 
-// Driver types. Only PostgreSQL can connect in this version; the others are
-// kept so a profile written for them is preserved, not lost.
+// Driver types. Only PostgreSQL and SQLite can connect in this version; the
+// others are kept so a profile written for them is preserved, not lost.
 const (
 	DriverPostgres  DriverType = "postgres"
 	DriverMySQL     DriverType = "mysql"
@@ -26,8 +27,12 @@ const (
 	DriverRedis     DriverType = "redis"
 )
 
+// Drivers lists every driver in the order the new-connection dialog shows
+// them.
+var Drivers = []DriverType{DriverPostgres, DriverSQLite, DriverMySQL, DriverSQLServer, DriverRedis}
+
 // Supported reports whether this version can connect with the driver.
-func (d DriverType) Supported() bool { return d == DriverPostgres }
+func (d DriverType) Supported() bool { return d == DriverPostgres || d == DriverSQLite }
 
 // Label is the name shown to the user.
 func (d DriverType) Label() string {
@@ -115,6 +120,20 @@ type Profile struct {
 	TLS               TLSOptions  `json:"tls"`
 	ConnectTimeoutSec int         `json:"connectTimeoutSec"`
 	Pool              PoolOptions `json:"pool"`
+	// SQLitePath is the database file of a SQLite profile, which has none of
+	// the network fields above.
+	SQLitePath string `json:"sqlitePath,omitempty"`
+	// ReadOnly opens a SQLite file so that nothing can write to it.
+	ReadOnly bool `json:"readOnly,omitempty"`
+}
+
+// Target names what the profile connects to, for places that list
+// connections: "db (user@host)" for PostgreSQL, the file name for SQLite.
+func (p Profile) Target() string {
+	if p.Driver == DriverSQLite {
+		return filepath.Base(p.SQLitePath)
+	}
+	return fmt.Sprintf("%s (%s@%s)", p.Database, p.Username, p.Host)
 }
 
 // Folder groups connections. Folders do not nest.
@@ -127,6 +146,16 @@ type Folder struct {
 // missing options filled in.
 func (p Profile) Normalized() Profile {
 	p.Name = strings.TrimSpace(p.Name)
+	if p.Driver == DriverSQLite {
+		// A file has no host, login or pool: keep none of them.
+		p.SQLitePath = strings.TrimSpace(p.SQLitePath)
+		p.Host, p.Port, p.Database, p.Username, p.SecretRef = "", 0, "", "", ""
+		p.TLS, p.Pool = TLSOptions{}, PoolOptions{}
+		if p.ConnectTimeoutSec == 0 {
+			p.ConnectTimeoutSec = DefaultConnectTimeoutSec
+		}
+		return p
+	}
 	p.Host = strings.TrimSpace(p.Host)
 	p.Database = strings.TrimSpace(p.Database)
 	p.Username = strings.TrimSpace(p.Username)
@@ -156,6 +185,7 @@ const (
 	FieldTLS      = "tls"
 	FieldRootCert = "rootCert"
 	FieldPassword = "password"
+	FieldPath     = "path"
 )
 
 // MaxPasswordBytes is the longest password that can be saved: MyGo's
@@ -227,6 +257,12 @@ func (p Profile) Validate() []FieldError {
 	if fe := ValidateName(p.Name); fe != nil {
 		errs = append(errs, *fe)
 	}
+	if p.Driver == DriverSQLite {
+		if p.SQLitePath == "" {
+			errs = append(errs, FieldError{FieldPath, "File is required"})
+		}
+		return errs
+	}
 	if !p.Driver.Supported() {
 		errs = append(errs, FieldError{FieldDriver, fmt.Sprintf("%s connections are not supported yet", p.Driver.Label())})
 	}
@@ -263,12 +299,38 @@ func (p Profile) Validate() []FieldError {
 // ValidateFiles checks that the CA certificate file, when the mode uses
 // one, can be opened.
 func (p Profile) ValidateFiles() []FieldError {
+	if p.Driver == DriverSQLite {
+		return p.validateSQLiteFile()
+	}
 	if p.TLS.RootCert == "" || !p.TLS.Mode.Verifies() {
 		return nil
 	}
 	f, err := os.Open(p.TLS.RootCert)
 	if err != nil {
 		return []FieldError{{FieldRootCert, "CA certificate cannot be read: " + pathError(err)}}
+	}
+	_ = f.Close()
+	return nil
+}
+
+// validateSQLiteFile checks that the database file exists and can be read. A
+// SQLite profile never creates its file.
+func (p Profile) validateSQLiteFile() []FieldError {
+	if p.SQLitePath == "" {
+		return nil
+	}
+	fi, err := os.Stat(p.SQLitePath)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return []FieldError{{FieldPath, "File not found"}}
+	case err != nil:
+		return []FieldError{{FieldPath, "File cannot be read: " + pathError(err)}}
+	case fi.IsDir():
+		return []FieldError{{FieldPath, "This is a folder, not a database file"}}
+	}
+	f, err := os.Open(p.SQLitePath)
+	if err != nil {
+		return []FieldError{{FieldPath, "File cannot be read: " + pathError(err)}}
 	}
 	_ = f.Close()
 	return nil
