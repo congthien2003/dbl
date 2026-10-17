@@ -82,12 +82,13 @@ func TestOpenTableReadsMetadataThenFirstPage(t *testing.T) {
 	if d.Value(0, 0).Text != "1" || d.Columns()[3].Kind == 0 {
 		t.Errorf("first value %v", d.Value(0, 0))
 	}
-	if !d.ReadOnly() {
-		t.Error("PostgreSQL tables are read-only in this phase")
+	if d.ReadOnly() {
+		t.Error("a table with a primary key and plain columns is not read-only")
 	}
 	for _, c := range d.Columns() {
-		if c.Editable {
-			t.Errorf("column %s is editable", c.Name)
+		want := c.Name == "name" || c.Name == "score" // not the key, not the binary column
+		if c.Editable != want || (!c.Editable && c.Reason == "") {
+			t.Errorf("column %s: editable %v reason %q, want editable %v", c.Name, c.Editable, c.Reason, want)
 		}
 	}
 	// Opening the same table again focuses the tab and reads nothing.

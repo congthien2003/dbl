@@ -6,9 +6,10 @@ type Column struct {
 	NativeType string
 	Kind       Kind
 	Width      float32
-	// Editable columns open a cell editor. Phase 2.2 reads only, so a
-	// PostgreSQL source reports no editable column.
+	// Editable columns open a cell editor. When a column is not editable,
+	// Reason says why, for the tooltip of its cells.
 	Editable   bool
+	Reason     string
 	Sortable   bool
 	PrimaryKey bool
 }

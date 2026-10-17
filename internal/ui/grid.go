@@ -37,6 +37,7 @@ type cellEdit struct {
 // gridView is the view state of one Table Inspector grid: row and cell
 // selection, the column layout the user arranged, and the cell editor.
 type gridView struct {
+	st      *app.State
 	list    mygoui.ListState
 	row     int     // the row chosen, -1 for none
 	cell    cellPos // the cell chosen, noCell for none
@@ -170,6 +171,7 @@ func (g *gridView) newPage() {
 
 // build draws the grid and handles its keys.
 func (g *gridView) build(c *mygoui.Context, st *app.State, tab *app.Tab, p Palette) {
+	g.st = st
 	src := tab.Source
 	var d *app.TableData
 	if tab.Data != nil {
@@ -254,16 +256,22 @@ func (g *gridView) build(c *mygoui.Context, st *app.State, tab *app.Tab, p Palet
 	if c.Shortcut(0, mygoui.KeyF2) {
 		g.startEdit(c, tab, g.cell)
 	}
+	// Shift+Delete makes the cell NULL, which typing cannot: an empty editor
+	// is the empty string.
+	if c.Shortcut(mygoui.Shift, mygoui.KeyDelete) {
+		g.setNull(c, tab, g.cell)
+	}
 }
 
 func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, col int) {
 	t := c.Theme()
 	pos := cellPos{row, col}
-	if g.edit != nil && g.edit.pos == pos {
-		g.buildEditor(c, tab)
-		return
-	}
+	editing := g.edit != nil && g.edit.pos == pos
 	v, dirty := g.value(tab, row, col)
+	rowErr := ""
+	if tab.Data != nil && dirty {
+		rowErr = tab.Data.RowErrors[tab.Source.RowID(row)]
+	}
 	// The box fills the content of its cell, so it is as high as the row
 	// less the padding MyGo's table gives a cell (Space(1.5) above and
 	// below, Space(2.5) at the sides).
@@ -276,30 +284,47 @@ func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, co
 		g.next[col] = r.X + r.W + padX
 		g.nextLeft[col] = r.X - padX
 	}
-	// A faint line below and to the right of the cell, over its whole
-	// padded area so neighbours join into rules.
+	var background mygoui.Color
+	switch {
+	case rowErr != "":
+		background = p.Error
+		box.Tooltip(rowErr)
+	case dirty:
+		background = p.Dirty
+	case g.cell == pos:
+		background = p.ActiveCell
+	}
+	// Paint the background and rules over the whole padded cell, matching
+	// the selection border. Rules stay above the background.
 	box.Draw(func(pt *mygoui.Painter, r mygoui.Rect) {
 		x0, y0 := r.X-padX, r.Y-padY
 		w, h := r.W+2*padX, r.H+2*padY
+		if background.A > 0 {
+			pt.Fill(mygoui.Rect{X: x0, Y: y0, W: w, H: h}, background, 0)
+		}
 		pt.Fill(mygoui.Rect{X: x0, Y: y0 + h - 1, W: w, H: 1}, p.GridLine, 0)
 		pt.Fill(mygoui.Rect{X: x0 + w - 1, Y: y0, W: 1, H: h}, p.GridLine, 0)
 		g.paintBottom = max(g.paintBottom, y0+h)
 	})
-	switch {
-	case dirty:
-		box.Background(p.Dirty)
-	case g.cell == pos:
-		box.Background(p.ActiveCell)
-	}
 	if g.cell == pos {
-		box.Border(1, g.base.Accent)
+		// Selection covers the table's padding without taking layout space.
+		box.DrawOver(func(pt *mygoui.Painter, r mygoui.Rect) {
+			pt.Stroke(mygoui.Rect{X: r.X - padX, Y: r.Y - padY, W: r.W + 2*padX, H: r.H + 2*padY}, g.base.Accent, 0, 1)
+		})
 	}
 	box.Children(func() {
+		if editing {
+			g.buildEditor(c, tab)
+			return
+		}
 		text := mygoui.Text(c, v.Display(maxCellRunes)).SingleLine()
 		if v.Kind == grid.KindNull || (v.Text == "" && v.Kind != grid.KindBinary) {
 			text.TextColor(p.Null).Italic()
 		}
 	})
+	if editing {
+		return
+	}
 	if box.Clicked() {
 		if g.edit != nil {
 			g.commit(c, tab)
@@ -313,13 +338,42 @@ func (g *gridView) buildCell(c *mygoui.Context, tab *app.Tab, p Palette, row, co
 	}
 }
 
-// startEdit opens the editor on pos unless the cell cannot be edited.
-func (g *gridView) startEdit(c *mygoui.Context, tab *app.Tab, pos cellPos) {
-	cols := tab.Source.Columns()
-	if pos.Row < 0 || pos.Col < 0 || pos.Col >= len(cols) || pos.Row >= tab.Source.Len() {
-		return
+// editBlock says why the cell at pos cannot be edited now, or "" when it
+// can: a column that never can be (the key, a binary column…), or a table that
+// is being saved, loading or not yet read again after a save.
+func (g *gridView) editBlock(tab *app.Tab, pos cellPos) string {
+	src := tab.Source
+	cols := src.Columns()
+	if pos.Row < 0 || pos.Col < 0 || pos.Col >= len(cols) || pos.Row >= src.Len() {
+		return "No cell."
 	}
 	if !cols[pos.Col].Editable {
+		if r := cols[pos.Col].Reason; r != "" {
+			return r
+		}
+		return "This cell cannot be edited."
+	}
+	if tab.Data != nil {
+		return tab.Data.EditLock()
+	}
+	return ""
+}
+
+// note is the line under the toolbar about the cell chosen: why it cannot be
+// edited, or how to make it NULL.
+func (g *gridView) note(tab *app.Tab) string {
+	if g.cell == noCell || g.edit != nil {
+		return ""
+	}
+	if why := g.editBlock(tab, g.cell); why != "" {
+		return "Cannot edit this cell: " + why
+	}
+	return "F2 edits the cell · Shift+Delete makes it NULL"
+}
+
+// startEdit opens the editor on pos unless the cell cannot be edited.
+func (g *gridView) startEdit(c *mygoui.Context, tab *app.Tab, pos cellPos) {
+	if g.editBlock(tab, pos) != "" {
 		return
 	}
 	v, _ := g.value(tab, pos.Row, pos.Col)
@@ -331,12 +385,36 @@ func (g *gridView) startEdit(c *mygoui.Context, tab *app.Tab, pos cellPos) {
 	c.Invalidate()
 }
 
+// setNull records NULL as the draft of a cell, if the column takes it.
+func (g *gridView) setNull(c *mygoui.Context, tab *app.Tab, pos cellPos) {
+	if g.editBlock(tab, pos) != "" {
+		return
+	}
+	if d := tab.Data; d != nil && !d.Meta.Columns[pos.Col].Nullable {
+		return
+	}
+	g.setDraft(tab, pos, grid.Value{Kind: grid.KindNull})
+	c.Invalidate()
+}
+
+// setDraft keeps v as the local draft of a cell. Nothing is written to any
+// database: Save does that.
+func (g *gridView) setDraft(tab *app.Tab, pos cellPos, v grid.Value) {
+	if g.st != nil {
+		g.st.SetDraft(tab, pos.Row, pos.Col, v)
+		return
+	}
+	src := tab.Source
+	tab.Drafts.Set(grid.CellRef{RowID: src.RowID(pos.Row), Col: pos.Col}, src.Value(pos.Row, pos.Col), v)
+}
+
 func (g *gridView) buildEditor(c *mygoui.Context, tab *app.Tab) {
 	e := g.edit
-	// The editor takes the full accent (focus ring, selection), not the
-	// paler one of the rows.
-	c.SetTheme(g.base)
-	in := mygoui.TextInput(c.Key("cell-edit"), &e.text).AutoFocus().Grow(1).Label("Cell editor")
+	// The cell supplies padding and selection border in both modes. The
+	// editor only adds editable text, with the window's selection color.
+	in := mygoui.TextInputBase(c.Key("cell-edit"), &e.text).
+		AutoFocus().Grow(1).MinWidth(0).AlignSelf(mygoui.Stretch).
+		SelectionColor(g.base.Selection).FocusRing(false).Label("Cell editor")
 	switch {
 	case in.Submitted():
 		g.commit(c, tab)
@@ -347,10 +425,9 @@ func (g *gridView) buildEditor(c *mygoui.Context, tab *app.Tab) {
 	}
 }
 
-// commit keeps the edit as a local draft. Nothing is written anywhere:
-// Phase 1 has no database. An edit that left the text as it was changes
-// nothing, so opening a NULL cell and pressing Enter does not turn it into
-// an empty string.
+// commit keeps the edit as a local draft. Nothing is written anywhere: Save
+// does that. An edit that left the text as it was changes nothing, so opening
+// a NULL cell and pressing Enter does not turn it into an empty string.
 func (g *gridView) commit(c *mygoui.Context, tab *app.Tab) {
 	e := g.edit
 	g.edit = nil
@@ -358,14 +435,8 @@ func (g *gridView) commit(c *mygoui.Context, tab *app.Tab) {
 	if e == nil || e.text == e.initial {
 		return
 	}
-	src := tab.Source
-	original := src.Value(e.pos.Row, e.pos.Col)
-	kind := original.Kind
-	if kind == grid.KindNull {
-		kind = grid.KindText
-	}
-	ref := grid.CellRef{RowID: src.RowID(e.pos.Row), Col: e.pos.Col}
-	tab.Drafts.Set(ref, original, grid.Value{Kind: kind, Text: e.text})
+	kind := tab.Source.Columns()[e.pos.Col].Kind
+	g.setDraft(tab, e.pos, grid.Value{Kind: kind, Text: e.text})
 }
 
 // cancel throws away what was typed.
@@ -377,6 +448,10 @@ func (g *gridView) cancel(c *mygoui.Context) {
 // revert drops every unsaved edit of the tab.
 func (g *gridView) revert(c *mygoui.Context, tab *app.Tab) {
 	g.edit = nil
-	tab.Drafts.Revert()
+	if g.st != nil {
+		g.st.RevertEdits(tab)
+	} else {
+		tab.Drafts.Revert()
+	}
 	c.Invalidate()
 }

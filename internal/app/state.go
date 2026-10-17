@@ -39,6 +39,9 @@ type State struct {
 	// to confirm leaving with unsaved changes.
 	PendingClose TabID
 	PendingQuit  bool
+	// PendingEdit is an action on a table tab held back because the tab has
+	// unsaved edits (see guard.go).
+	PendingEdit *PendingEdit
 
 	// Hooks set by main. All may be nil.
 	SetThemeSource      func(storage.ThemePref)
@@ -96,6 +99,17 @@ func (s *State) RequestClose(id TabID) (closed bool) {
 	return true
 }
 
+// SaveAndClose saves the tab waiting in PendingClose and closes it once the
+// changes are committed. If the Save fails the tab stays open, with its edits
+// and the reason.
+func (s *State) SaveAndClose() {
+	id := s.PendingClose
+	s.PendingClose = 0
+	if tab := s.Workspace.Find(id); tab != nil {
+		s.SaveAll([]*Tab{tab}, func() { s.Workspace.Close(id) })
+	}
+}
+
 // ConfirmClose closes the tab waiting in PendingClose, discarding its drafts.
 func (s *State) ConfirmClose() {
 	if s.PendingClose != 0 {
@@ -115,6 +129,14 @@ func (s *State) RequestQuit() (allowed bool) {
 		return false
 	}
 	return true
+}
+
+// SaveAndQuit saves every tab with unsaved edits, one after another, and calls
+// quit once they are all committed. If one fails the window stays open on
+// that tab.
+func (s *State) SaveAndQuit(quit func()) {
+	s.PendingQuit = false
+	s.SaveAll(s.Workspace.DirtyTabs(), quit)
 }
 
 // CancelQuit keeps the window open.

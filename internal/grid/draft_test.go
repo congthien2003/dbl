@@ -45,3 +45,30 @@ func TestZeroDraftsIsUsable(t *testing.T) {
 	}
 	d.Revert() // must not panic
 }
+
+func TestDraftsRefsAreOrderedAndHasRow(t *testing.T) {
+	var d Drafts
+	orig := Value{Kind: KindText, Text: "a"}
+	edit := Value{Kind: KindText, Text: "b"}
+	for _, ref := range []CellRef{{RowID: 9, Col: 2}, {RowID: 3, Col: 5}, {RowID: 9, Col: 0}, {RowID: 3, Col: 1}} {
+		d.Set(ref, orig, edit)
+	}
+	want := []CellRef{{3, 1}, {3, 5}, {9, 0}, {9, 2}}
+	got := d.Refs()
+	if len(got) != len(want) {
+		t.Fatalf("Refs = %v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Refs = %v, want %v", got, want)
+		}
+	}
+	if !d.HasRow(3) || !d.HasRow(9) || d.HasRow(4) {
+		t.Errorf("HasRow: 3=%v 9=%v 4=%v", d.HasRow(3), d.HasRow(9), d.HasRow(4))
+	}
+	d.Set(CellRef{RowID: 3, Col: 1}, orig, orig)
+	d.Set(CellRef{RowID: 3, Col: 5}, orig, orig)
+	if d.HasRow(3) {
+		t.Error("a row whose drafts all went back to the original still has a draft")
+	}
+}

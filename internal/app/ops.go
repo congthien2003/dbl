@@ -13,6 +13,8 @@ import (
 const (
 	MetadataTimeout = 30 * time.Second
 	PageTimeout     = 30 * time.Second
+	// SaveTimeout bounds a Save. It can be canceled until COMMIT is sent.
+	SaveTimeout = 60 * time.Second
 )
 
 // OpState is the state of a piece of data that is read from a database.
@@ -62,6 +64,16 @@ func (sl *opSlot) stop() {
 		sl.cur.cancel()
 		sl.cur = nil
 	}
+}
+
+// release ends o without asking whether its result may be applied. A Save
+// uses it: the result of a write is applied even after the op's context ended,
+// because the write may have been committed.
+func (sl *opSlot) release(o *op) {
+	if sl.cur == o {
+		sl.cur = nil
+	}
+	o.cancel()
 }
 
 // finish reports whether o may apply its result: it is the current op of the

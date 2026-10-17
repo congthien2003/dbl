@@ -183,7 +183,11 @@ func tabsNote(pc *app.PendingConn) string {
 	if pc.DirtyTabs > 0 {
 		note += fmt.Sprintf(", and the unsaved changes in %d of them will be lost", pc.DirtyTabs)
 	}
-	return note + "."
+	note += "."
+	if pc.SavingTabs > 0 {
+		note += savingNote(pc.SavingTabs)
+	}
+	return note
 }
 
 // connectionDialogs asks about the connection changes the state holds back.
@@ -206,10 +210,17 @@ func (sh *Shell) connectionDialogs(c *mygoui.Context) {
 			msg = "The connection is open. Saving these changes disconnects it." + tabsNote(pc)
 			confirm = "Save and disconnect"
 		}
+		buttons := []string{"Cancel", confirm}
+		if pc.DirtyTabs > 0 && canSave(st.Workspace.TabsOf(pc.ConnectionID)) {
+			buttons = append(buttons, "Save changes first")
+		}
 		open := true
-		switch mygoui.AlertDialog(c, &open, title, msg, "Cancel", confirm) {
+		switch mygoui.AlertDialog(c, &open, title, msg, buttons...) {
 		case 1:
 			st.ConfirmConn()
+			c.Invalidate()
+		case 2:
+			st.SaveAndConfirmConn()
 			c.Invalidate()
 		case 0, mygoui.AlertDismissed:
 			st.CancelConn()

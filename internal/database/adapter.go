@@ -21,8 +21,7 @@ type Adapter interface {
 // it returns. Errors are *Error values; a canceled ctx gives KindCanceled
 // and a deadline KindTimeout.
 //
-// Writing (SaveChanges) and free-form SQL (Execute) arrive with Phases 2.3
-// and 2.4.
+// Free-form SQL (Execute) arrives with Phase 2.4.
 type SQLAdapter interface {
 	Adapter
 	// ListSchemas lists the schemas of the connected database that the
@@ -36,4 +35,14 @@ type SQLAdapter interface {
 	DescribeTable(ctx context.Context, ref TableRef) (*TableMetadata, error)
 	// FetchPage reads one page of a table (see PageRequest).
 	FetchPage(ctx context.Context, req PageRequest) (*PageResult, error)
+	// SaveChanges writes a ChangeSet in one transaction (spec FR-005). It
+	// validates the changes first and writes nothing when they are not
+	// valid. Each row is found by its original identity and written only if
+	// the columns being changed still hold the values the user saw; a row
+	// that matches nothing is a conflict and one that matches more than one
+	// row is unsafe, and either rolls everything back. Canceling ctx stops
+	// the Save only until COMMIT is sent. A nil result means the transaction
+	// is committed; any error is a *SaveError saying whether the outcome is
+	// known. A write is never retried.
+	SaveChanges(ctx context.Context, req SaveRequest) error
 }
